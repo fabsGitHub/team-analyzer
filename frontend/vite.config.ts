@@ -7,5 +7,15 @@ function vuePlugin() {
 }
 export default defineConfig({
   plugins: [vuePlugin()],
-  server: { port: 5173 },
+  base: '/', // bei Deployment unter /app/ -> base: '/app/'
+  server: {
+    port: 5173,
+    proxy: {
+      // nur nötig, wenn du in .env.development `VITE_API_BASE=/api` setzen willst
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 })

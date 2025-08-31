@@ -16,6 +16,8 @@
         <canvas ref="canvas" :width="size" :height="size" class="radar" @click="onClick" @keydown.enter.prevent="onKey"
             tabindex="0" :aria-label="a11yDesc"></canvas>
         <p class="label" style="margin-top:.5rem; color:var(--muted)">{{ hint }}</p>
+        <p v-if="!series.length" class="label">Keine Daten/Teams ausgewählt.</p>
+
     </div>
 </template>
 <script setup lang="ts">

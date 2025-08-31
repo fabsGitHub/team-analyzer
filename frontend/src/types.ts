@@ -14,7 +14,7 @@ export const CATEGORY_KEYS: CategoryKey[] = [
 ]
 export type TeamId = string
 export interface Evaluation {
-  id: string
+  id: String
   name: string
   team: TeamId
   appreciation: number

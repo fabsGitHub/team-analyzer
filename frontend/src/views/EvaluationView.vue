@@ -44,7 +44,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="e in state.evaluations" :key="e.id">
+                <tr v-for="e in state.evaluations" :key="String(e.id)">
                     <td>{{ e.name }}</td>
                     <td><span class="badge">{{ e.team }}</span></td>
                     <td>{{ e.appreciation }}</td>
@@ -53,7 +53,8 @@
                     <td>{{ e.collegiality }}</td>
                     <td>{{ e.transparency }}</td>
                     <td>
-                        <button class="btn" @click="startEdit(e)" v-html="editIcon" :aria-label="t('table.edit')"></button>
+                        <button class="btn" @click="startEdit(e)" v-html="editIcon"
+                            :aria-label="t('table.edit')"></button>
                         <button class="btn danger" @click="askDelete(e)">
                             <span v-html="trashIcon"></span>
                             <span class="sr-only">{{ t('table.del') }}</span>
@@ -98,9 +99,9 @@ function confirm() {
 }
 function startEdit(e: Evaluation) {
     Object.assign(form, { name: e.name, team: e.team, appreciation: e.appreciation, equality: e.equality, workload: e.workload, collegiality: e.collegiality, transparency: e.transparency })
-    editing.value = true; editId = e.id; isOpen.value = true
+    editing.value = true; editId = String(e.id); isOpen.value = true
 }
 const confirmDel = ref<Evaluation | null>(null)
 function askDelete(e: Evaluation) { confirmDel.value = e }
-function doDelete() { if (confirmDel.value) deleteEvaluation(confirmDel.value.id); confirmDel.value = null }
+function doDelete() { if (confirmDel.value) deleteEvaluation(String(confirmDel.value.id)); confirmDel.value = null }
 </script>

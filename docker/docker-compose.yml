@@ -1,0 +1,47 @@
+services:
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: teambase
+      MYSQL_USER: teambase
+      MYSQL_PASSWORD: teambase
+      MYSQL_ROOT_PASSWORD: root
+    ports: ["3306:3306"]
+    volumes: [dbdata:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    env_file:
+      - ../.env.production
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/teambase?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: teambase
+      SPRING_DATASOURCE_PASSWORD: teambase
+      # optional: log-level
+      # LOGGING_LEVEL_ROOT: INFO
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["8080:8080"]
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    # VITE_API_BASE wird bereits im Dockerfile auf /api gesetzt;
+    # hier optional überschreiben:
+    # environment:
+    #   VITE_API_BASE: /api
+    ports: ["5173:80"]
+    depends_on: [backend]
+
+volumes:
+  dbdata: {}

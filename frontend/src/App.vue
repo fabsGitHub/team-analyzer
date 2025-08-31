@@ -1,20 +1,36 @@
 <!-- frontend/src/App.vue -->
 <template>
   <div class="app">
-    <HeaderNav/>
+    <HeaderNav />
     <main id="main" class="container" tabindex="-1">
-      <router-view/>
+      <router-view />
     </main>
-    <Toast/>
+    <Toast />
   </div>
 </template>
 
 <script setup lang="ts">
 import HeaderNav from './components/HeaderNav.vue'
 import Toast from './components/Toast.vue'
+
+import { onMounted } from 'vue'
+import { useStore } from './store'
+
+const { init } = useStore()
+onMounted(() => { init() })
+
 </script>
 
 <style>
-.app { min-height: 100vh; display:flex; flex-direction:column; }
-.container { width:min(52rem, 100%); margin-inline:auto; padding:1rem; }
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  width: min(52rem, 100%);
+  margin-inline: auto;
+  padding: 1rem;
+}
 </style>
