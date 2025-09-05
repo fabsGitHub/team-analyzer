@@ -58,11 +58,13 @@ header.nav {
   font-weight: 700;
   color: var(--accent);
 }
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-left: auto;
+
+/* This is the important change */
+.navigation {
+  margin-left: auto; /* pushes the nav to the right = max space from brand */
 }
+
+
 .tab {
   padding: 0.5rem 0.75rem;
   border-radius: 999px;
@@ -74,7 +76,8 @@ header.nav {
   border-color: var(--accent);
 }
 .lang {
-  margin-left: 0.5rem;
+  margin-left: auto; /* small gap between nav and language select */
+
 }
 .card {
   background: var(--surface);
@@ -164,4 +167,85 @@ header.nav {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   clip-path: inset(50%);
+}
+
+.user {
+  position: relative;
+  margin-left: 0.5rem;
+}
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+.icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  padding: 0.5rem;
+  z-index: 20;
+}
+.menu-header {
+  padding: 0.25rem 0.5rem;
+}
+.menu-email {
+  font-size: 0.9rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+.menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.5rem 0;
+}
+.menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: #fff6ee;
+  border-color: var(--border);
+  outline: none;
+}
+
+/* Containerbreite steuern (Header nutzt bereits max-width) */
+main, .card { max-width: 52rem; margin-inline: auto; }
+
+/* Tabs: Scroll auf schmalen Screens */
+.tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.badge { white-space: nowrap; }
+
+/* Buttons dezenter auf Mobil */
+@media (max-width: 720px){
+  .btn { padding: .55rem .75rem; }
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }

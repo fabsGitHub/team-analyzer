@@ -6,6 +6,7 @@
       <router-view />
     </main>
     <Toast />
+    <FooterModal />
   </div>
 </template>
 
@@ -15,6 +16,7 @@ import Toast from './components/Toast.vue'
 
 import { onMounted } from 'vue'
 import { useStore } from './store'
+import FooterModal from './components/FooterModal.vue'
 
 const { init } = useStore()
 onMounted(() => { init() })

@@ -18,8 +18,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.teamanalyzer.teamanalyzer.filter.JwtAuthFilter;
 
+import lombok.RequiredArgsConstructor;
+
 @Configuration
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
   @Bean

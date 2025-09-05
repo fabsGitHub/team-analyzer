@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -21,46 +23,76 @@ import com.teamanalyzer.teamanalyzer.domain.User;
 
 @Component
 public class JwtService {
-    @Value("${app.jwt.secret}")
-    private String secret; // 256-bit base64
-    @Value("${app.jwt.ttl-minutes:15}")
-    private long ttl;
+
+    private final byte[] key;
+    private final String issuer;
+    private final long ttlMinutes;
+    private final JWSAlgorithm alg;
+    private final JWSHeader header;
+
+    public JwtService(
+            @Value("${app.jwt.secret}") String secretBase64,
+            @Value("${app.auth.issuer}") String issuer,
+            @Value("${app.jwt.ttl-minutes:60}") long ttlMinutes) {
+        this.key = Base64.getDecoder().decode(secretBase64 == null ? "" : secretBase64);
+        if (this.key.length >= 64) {
+            this.alg = JWSAlgorithm.HS512;
+        } else if (this.key.length >= 32) {
+            this.alg = JWSAlgorithm.HS256;
+        } else {
+            throw new IllegalStateException(
+                    "app.jwt.secret (Base64) ist zu kurz: mindestens 256 Bit (32 Bytes) erforderlich");
+        }
+        this.header = new JWSHeader(this.alg);
+        this.issuer = issuer;
+        this.ttlMinutes = ttlMinutes;
+    }
 
     public String createAccessToken(User u) {
-        var now = Instant.now();
+        // ACHTUNG: u.getRoles() muss initialisiert sein (EntityGraph oder einmaliges
+        // Access im Login)!
+        List<String> roles = (u.getRoles() == null)
+                ? List.<String>of()
+                : u.getRoles().stream()
+                        .map(r -> String.valueOf(r.name()))
+                        .collect(Collectors.toList());
+
+        var now = new Date();
+        var exp = Date.from(now.toInstant().plus(ttlMinutes, ChronoUnit.MINUTES));
+
         var claims = new JWTClaimsSet.Builder()
-                .subject(u.getId().toString())
-                .issuer("teamanalyzer")
-                .issueTime(Date.from(now))
-                .expirationTime(Date.from(now.plus(ttl, ChronoUnit.MINUTES)))
+                .issuer(issuer)
+                .subject(u.getEmail())
                 .claim("email", u.getEmail())
-                .claim("roles", u.getRoles())
+                .claim("roles", roles)
+                .issueTime(now)
+                .expirationTime(exp)
                 .build();
-        MACSigner signer;
+
+        var jwt = new SignedJWT(header, claims);
         try {
-            signer = new MACSigner(Base64.getDecoder().decode(secret));
-        } catch (com.nimbusds.jose.KeyLengthException e) {
-            throw new RuntimeException("Invalid JWT secret key length", e);
-        }
-        var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
-        try {
-            jwt.sign(signer);
+            jwt.sign(new MACSigner(key));
+            return jwt.serialize();
         } catch (JOSEException e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException("Failed to sign access token", e);
         }
-        return jwt.serialize();
     }
 
     public JWTClaimsSet validate(String token) {
         try {
             var jwt = SignedJWT.parse(token);
-            var verifier = new MACVerifier(Base64.getDecoder().decode(secret));
-            if (!jwt.verify(verifier))
+            var verifier = new MACVerifier(key); // prüft inkl. passender Keylänge zur im Header angegebenen alg
+            if (!jwt.verify(verifier)) {
                 throw new BadCredentialsException("Invalid signature");
-            var exp = jwt.getJWTClaimsSet().getExpirationTime().toInstant();
-            if (Instant.now().isAfter(exp))
+            }
+            var claims = jwt.getJWTClaimsSet();
+            var exp = claims.getExpirationTime();
+            if (exp == null || Instant.now().isAfter(exp.toInstant())) {
                 throw new CredentialsExpiredException("Expired");
-            return jwt.getJWTClaimsSet();
+            }
+            return claims;
+        } catch (BadCredentialsException | CredentialsExpiredException e) {
+            throw e;
         } catch (Exception e) {
             throw new BadCredentialsException("Invalid token", e);
         }

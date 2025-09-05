@@ -6,6 +6,7 @@ services:
       MYSQL_USER: teambase
       MYSQL_PASSWORD: teambase
       MYSQL_ROOT_PASSWORD: root
+      
     ports: ["3306:3306"]
     volumes: [dbdata:/var/lib/mysql]
     healthcheck:

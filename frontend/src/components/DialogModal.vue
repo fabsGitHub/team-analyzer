@@ -4,6 +4,7 @@
         @keydown.esc.prevent="close">
         <div class="backdrop" @click="close"></div>
         <div class="sheet card" ref="panel" tabindex="-1">
+            <button class="iconbtn close" @click="close" aria-label="Schließen">✕</button>
             <h2 :id="titleId">
                 <slot name="title" />
             </h2>
@@ -24,7 +25,7 @@ const props = defineProps<{ open: boolean; danger?: boolean; cancelText?: string
 const emit = defineEmits<{ (e: 'close'): void; (e: 'confirm'): void }>()
 const panel = ref<HTMLDivElement | null>(null)
 const titleId = `dialog-${Math.random().toString(36).slice(2)}`
-function close() { emit('close') }
+const close = () => emit('close')
 watch(() => props.open, (v) => { if (v) setTimeout(() => panel.value?.focus(), 0) })
 onMounted(() => { if (props.open) panel.value?.focus() })
 </script>
@@ -34,6 +35,7 @@ onMounted(() => { if (props.open) panel.value?.focus() })
     inset: 0;
     display: grid;
     place-items: center;
+    z-index: 40;
 }
 
 .backdrop {
@@ -46,5 +48,22 @@ onMounted(() => { if (props.open) panel.value?.focus() })
     position: relative;
     max-width: 34rem;
     width: calc(100% - 2rem);
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.close {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+}
+
+@media (max-width:720px) {
+    .sheet {
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        border-radius: 0
+    }
 }
 </style>

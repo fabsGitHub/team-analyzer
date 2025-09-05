@@ -1,14 +1,12 @@
-// frontend/src/api/client.ts
 import axios, { AxiosError } from 'axios'
 import type { Evaluation, TeamAggregate } from '../types'
-import type { AxiosRequestConfig } from 'axios'
+import type { AxiosRequestConfig, AxiosResponse } from 'axios'
 
 const apiBase = (import.meta.env.VITE_API_BASE as string) ?? '/api'
 
-// --- in-memory token plumbing (vom Store gesetzt) ---
+// token wiring (provided by store)
 let getToken: () => string = () => ''
 let setToken: (t: string) => void = () => {}
-
 export function useAuthToken(
   getter: () => string,
   setter: (t: string) => void,
@@ -17,30 +15,35 @@ export function useAuthToken(
   setToken = setter
 }
 
-// --- axios instance ---
+// axios
 export const http = axios.create({
   baseURL: apiBase,
-  withCredentials: true, // sendet Refresh-Cookie für /auth/refresh
+  withCredentials: true, // needed for cookie-based refresh
   headers: { 'Content-Type': 'application/json' },
 })
 
-// --- request: Authorization anhängen ---
-http.interceptors.request.use((cfg) => {
+// request: attach Authorization
+http.interceptors.request.use((config) => {
   const token = getToken()
-  if (token && cfg.headers) cfg.headers.Authorization = `Bearer ${token}`
-  return cfg
+  if (!config.headers) config.headers = new (axios.AxiosHeaders as any)()
+  if (token) (config.headers as any).Authorization = `Bearer ${token}`
+  else delete (config.headers as any).Authorization
+  return config
 })
 
-// --- response: 401 -> einmalig refreshen + retry der Original-Request ---
+// refresh pipeline
 let isRefreshing = false
-let pending: Array<(t: string) => void> = []
+type Waiter = { onToken: (tok: string) => void; onError: (err: any) => void }
+let pending: Waiter[] = []
 
 async function refreshAccessToken(): Promise<string> {
   const { data } = await http.post<{ accessToken: string }>('/auth/refresh')
   setToken(data.accessToken)
+  http.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`
   return data.accessToken
 }
 
+// response: on 401 -> refresh once and retry
 http.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
@@ -48,18 +51,17 @@ http.interceptors.response.use(
     const original = error.config as
       | (AxiosRequestConfig & { _retry?: boolean })
       | undefined
-
-    // kein Retry bei fehlender Response, bei Login/Register/Refresh selbst oder wenn schon versucht
     const url = (original?.url ?? '').toString()
     const isAuthEndpoint =
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
       url.includes('/auth/refresh')
+
     if (
       !resp ||
       resp.status !== 401 ||
-      isAuthEndpoint ||
       !original ||
+      isAuthEndpoint ||
       original._retry
     ) {
       return Promise.reject(error)
@@ -71,28 +73,37 @@ http.interceptors.response.use(
       isRefreshing = true
       try {
         const newTok = await refreshAccessToken()
-        pending.forEach((cb) => cb(newTok))
+        if (!original.headers) original.headers = {}
+        ;(original.headers as any).Authorization = `Bearer ${newTok}`
+        const retryResponse: AxiosResponse = await http(original)
+        pending.forEach((w) => w.onToken(newTok))
         pending = []
+        return retryResponse
       } catch (e) {
+        pending.forEach((w) => w.onError(e))
         pending = []
-        setToken('') // Session ist wirklich weg
-        return Promise.reject(e)
+        setToken('')
+        delete http.defaults.headers.common.Authorization
+        throw e
       } finally {
         isRefreshing = false
       }
     }
 
-    return new Promise((resolve) => {
-      pending.push((tok) => {
-        if (!original.headers) original.headers = {}
-        ;(original.headers as any).Authorization = `Bearer ${tok}`
-        resolve(http(original))
+    return new Promise((resolve, reject) => {
+      pending.push({
+        onToken: (tok) => {
+          if (!original.headers) original.headers = {}
+          ;(original.headers as any).Authorization = `Bearer ${tok}`
+          http(original).then(resolve).catch(reject)
+        },
+        onError: (err) => reject(err),
       })
     })
   },
 )
 
-// ------- Public API -------
+// Public API
 export const Api = {
   // Auth
   async register(email: string, password: string): Promise<void> {
@@ -107,6 +118,7 @@ export const Api = {
       password,
     })
     setToken(data.accessToken)
+    http.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`
     return data
   },
   async logout(): Promise<void> {
@@ -114,6 +126,7 @@ export const Api = {
       await http.post('/auth/logout')
     } finally {
       setToken('')
+      delete http.defaults.headers.common.Authorization
     }
   },
   async me(): Promise<{ email: string; roles: string[] }> {
@@ -129,10 +142,10 @@ export const Api = {
   async createEvaluation(e: Evaluation) {
     return http.post('/evaluations', e)
   },
-  async updateEvaluation(id: String, patch: Partial<Evaluation>) {
+  async updateEvaluation(id: string, patch: Partial<Evaluation>) {
     return http.put(`/evaluations/${id}`, patch)
   },
-  async deleteEvaluation(id: String) {
+  async deleteEvaluation(id: string) {
     return http.delete(`/evaluations/${id}`)
   },
 

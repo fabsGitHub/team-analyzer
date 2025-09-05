@@ -1,13 +1,14 @@
-// frontend/src/store.ts
 import { reactive } from 'vue'
 import type { Evaluation } from './types'
 import { Api, useAuthToken } from './api/client'
 import { seed } from './fixtures/demo'
+import { i18n } from './i18n'
 
 function uuid() {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
 }
 const DEBOUNCE_MS = 120
+const $t = (k: string) => (i18n.global as any).t(k) as string
 
 const state = reactive({
   token: '' as string,
@@ -30,7 +31,7 @@ const state = reactive({
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let inflightAgg: Promise<any> | null = null
 
-// --- NEU: einfache Request-Queue für "Gast"-Modus -----------------
+// --- simple queue for guest actions (sent after login) ---
 type Task = () => Promise<void>
 const requestQueue: Task[] = []
 let flushing = false
@@ -49,8 +50,6 @@ async function flushQueue() {
   }
   flushing = false
 }
-
-/** Führt task sofort aus, oder reiht ihn ein, wenn (noch) nicht eingeloggt. */
 function queueOrRun(task: Task): Promise<void> {
   if (!isLoggedIn()) {
     return new Promise<void>((resolve, reject) => {
@@ -75,23 +74,35 @@ useAuthToken(
 )
 
 export const useStore = () => {
+  /** allow router to set user after /me */
+  function setUser(u: { email: string; roles: string[] } | null) {
+    state.user = u
+  }
+
+  /** Boot once: try session (/me) first, then choose data source */
   async function init() {
     state.loading = true
     try {
-      // Gast-Modus: keine API-Calls – nur Seed laden
-      if (!isLoggedIn()) {
+      // Try to recover session (interceptor will POST /auth/refresh on 401)
+      if (!state.user) {
+        try {
+          const me = await Api.me()
+          state.user = me
+        } catch {
+          // stay guest
+        }
+      }
+
+      if (isLoggedIn()) {
+        const fromApi = await Api.listEvaluations()
+        state.evaluations =
+          Array.isArray(fromApi) && fromApi.length ? fromApi : [...seed]
+        state.evalVersion++
+        await fetchAggregates()
+      } else {
         state.evaluations = [...seed]
         state.evalVersion++
-        return
       }
-      // (Falls z.B. Token/User bereits vorhanden)
-      const fromApi = await Api.listEvaluations()
-      state.evaluations = fromApi && fromApi.length ? fromApi : [...seed]
-      state.evalVersion++
-      await fetchAggregates()
-    } catch {
-      state.evaluations = [...seed]
-      state.evalVersion++
     } finally {
       state.loading = false
     }
@@ -99,17 +110,16 @@ export const useStore = () => {
 
   // ----- Auth -----
   async function login(email: string, password: string) {
-    await Api.login(email, password) // setzt token via interceptor-setter
+    await Api.login(email, password)
     state.user = await Api.me()
     toast($t('toast.signedin'))
-
-    // Nach Login: Queue flushen + frische Serverdaten nachladen
     await flushQueue()
     await refreshFromServer()
   }
 
   async function refreshFromServer() {
     try {
+      if (!isLoggedIn()) return
       const fromApi = await Api.listEvaluations()
       if (Array.isArray(fromApi)) {
         state.evaluations = fromApi
@@ -130,7 +140,7 @@ export const useStore = () => {
     await Api.logout()
     state.user = null
     toast($t('toast.signedout'))
-    // Zurück in Gast-Modus: lokale Seed-Daten
+    // Guest mode: local seed
     state.evaluations = [...seed]
     state.evalVersion++
     state.aggregatesCache = null
@@ -151,7 +161,7 @@ export const useStore = () => {
     state.toasts = state.toasts.filter((t) => t.id !== id)
   }
 
-  // ----- CRUD (optimistisch + queued) -----
+  // ----- CRUD (optimistic + queued) -----
   function addEvaluation(
     input: Omit<Evaluation, 'id' | 'createdAt' | 'updatedAt'>,
   ) {
@@ -162,13 +172,10 @@ export const useStore = () => {
       updatedAt: now,
       ...input,
     }
-    // Optimistisches Update lokal
     state.evaluations.unshift(e)
     state.evalVersion++
     toast($t('toast.saved'))
     scheduleFetchAggregates()
-
-    // API-Call blockieren oder sofort senden
     void queueOrRun(async () => {
       await Api.createEvaluation(e)
     })
@@ -185,7 +192,6 @@ export const useStore = () => {
     state.evalVersion++
     toast($t('toast.updated'))
     scheduleFetchAggregates()
-
     void queueOrRun(async () => {
       await Api.updateEvaluation(id, patch)
     })
@@ -196,13 +202,12 @@ export const useStore = () => {
     state.evalVersion++
     toast($t('toast.deleted'))
     scheduleFetchAggregates()
-
     void queueOrRun(async () => {
       await Api.deleteEvaluation(id)
     })
   }
 
-  // ----- Aggregates (nur wenn eingeloggt) -----
+  // ----- Aggregates (only when logged in; no polling) -----
   function scheduleFetchAggregates() {
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
@@ -211,11 +216,9 @@ export const useStore = () => {
   }
 
   async function fetchAggregates() {
-    // Wichtig: im Gast-Modus NICHT abfragen – wird nach Login nachgeholt
     if (!isLoggedIn()) return
-    if (state.lastAggVersion === state.evalVersion && state.aggregatesCache) {
+    if (state.lastAggVersion === state.evalVersion && state.aggregatesCache)
       return state.aggregatesCache
-    }
     if (inflightAgg) return inflightAgg
 
     state.aggregatesLoading = true
@@ -242,6 +245,7 @@ export const useStore = () => {
   return {
     state,
     // auth
+    setUser,
     login,
     register,
     logout,
@@ -252,14 +256,9 @@ export const useStore = () => {
     updateEvaluation,
     deleteEvaluation,
     fetchAggregates,
+    refreshFromServer,
     // ui
     toast,
     dismiss,
   }
-}
-
-// lightweight i18n
-import { i18n } from './i18n'
-function $t(key: string) {
-  return (i18n.global as any).t(key) as string
 }

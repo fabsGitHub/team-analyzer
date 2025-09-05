@@ -30,7 +30,7 @@ app:
   auth:
     issuer: "teamanalyzer"
     email-verify-exp-min: 60
-    hmac-secret: "${EMAIL_VERIFY_HMAC_SECRET:change-me-to-512-bit}"
+    hmac-secret: "${EMAIL_VERIFY_HMAC_SECRET}"
   frontend-base-url: "http://localhost:5173"
   verify-endpoint-path: "/verify"
   jwt:
@@ -95,3 +95,17 @@ spring:
     locations: classpath:db/migration/mysql
     clean-disabled: true
     validate-migration-naming: true
+
+app:
+  mail:
+    enabled: false
+  cookies:
+    enabled: false
+
+server:
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    com.teamanalyzer: DEBUG

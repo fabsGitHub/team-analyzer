@@ -1,5 +1,7 @@
 package com.teamanalyzer.teamanalyzer.web;
 
+import org.slf4j.Logger; // NEW
+import org.slf4j.LoggerFactory; // NEW
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -17,9 +19,9 @@ import com.teamanalyzer.teamanalyzer.service.JwtService;
 import com.teamanalyzer.teamanalyzer.web.dto.LoginDto;
 import com.teamanalyzer.teamanalyzer.web.dto.RegisterDto;
 
-import com.teamanalyzer.teamanalyzer.service.EmailVerifyTokenService; // NEW
-import com.teamanalyzer.teamanalyzer.service.MailService; // NEW
-import org.springframework.beans.factory.annotation.Value; // NEW
+import com.teamanalyzer.teamanalyzer.service.EmailVerifyTokenService;
+import com.teamanalyzer.teamanalyzer.service.MailService;
+import org.springframework.beans.factory.annotation.Value;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,29 +37,53 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class); // NEW
+
     private final UserRepository users;
     private final RefreshTokenRepository tokens;
     private final PasswordEncoder enc;
     private final JwtService jwt;
 
-    // NEW: Services für E-Mail-Verification
     private final EmailVerifyTokenService emailTokenSvc;
     private final MailService mail;
 
-    // NEW: Link-Basis & Frontend-Route
     private final String frontendBaseUrl;
     private final String verifyEndpointPath;
+
+    @Value("${app.mail.enabled:true}") // NEW: Mail versenden standardmäßig an, per Profil deaktivierbar
+    private boolean mailEnabled;
+
+    @Value("${app.cookies.secure:true}") // default: sicher
+    private boolean cookieSecure;
+
+    // Hilfsfunktion: erkennt HTTPS (direkt oder via Proxy)
+    /*
+     * private boolean isHttps(HttpServletRequest req) {
+     * if (req.isSecure())
+     * return true;
+     * String xfProto = req.getHeader("X-Forwarded-Proto");
+     * return xfProto != null && xfProto.equalsIgnoreCase("https");
+     * }
+     */
+    private ResponseCookie buildRefreshCookie(String value, HttpServletRequest req, long maxAgeSeconds) {
+        return ResponseCookie.from("refresh_token", value)
+                .httpOnly(true)
+                .secure(cookieSecure) // <-- hier die Magie
+                .sameSite("Lax")
+                .path("/api/auth")
+                .maxAge(Duration.ofSeconds(maxAgeSeconds))
+                .build();
+    }
 
     public AuthController(
             UserRepository users,
             RefreshTokenRepository tokens,
             PasswordEncoder enc,
             JwtService jwt,
-            EmailVerifyTokenService emailTokenSvc, // NEW
-            MailService mail, // NEW
-            @Value("${app.frontend-base-url}") String frontendBaseUrl, // NEW
-            @Value("${app.verify-endpoint-path:/verify}") String verifyEndpointPath // NEW
-    ) {
+            EmailVerifyTokenService emailTokenSvc,
+            MailService mail,
+            @Value("${app.frontend-base-url}") String frontendBaseUrl,
+            @Value("${app.verify-endpoint-path}") String verifyEndpointPath) {
         this.users = users;
         this.tokens = tokens;
         this.enc = enc;
@@ -82,20 +108,30 @@ public class AuthController {
         u.setEnabled(false);
         users.save(u);
 
-        // NEW: Verify-Mail rausschicken
+        // Verify-Token erzeugen und Link bauen
         String token = emailTokenSvc.create(email);
         String link = frontendBaseUrl + verifyEndpointPath + "?token=" + token;
 
-        String subject = "Bitte bestätige deine E-Mail-Adresse";
-        String body = """
-                Willkommen bei TeamAnalyzer!
+        // DEV: immer loggen, damit man ohne SMTP sofort testen kann
+        log.info("DEV: Verification link for {} -> {}", email, link); // NEW
 
-                Bitte bestätige deine E-Mail, indem du auf den folgenden Link klickst:
-                %s
+        // Mail nur senden, wenn aktiviert – Fehler niemals durchreichen
+        if (mailEnabled) {
+            try {
+                String subject = "Bitte bestätige deine E-Mail-Adresse";
+                String body = """
+                        Willkommen bei TeamAnalyzer!
 
-                Der Link ist zeitlich begrenzt gültig.
-                """.formatted(link);
-        mail.send(email, subject, body);
+                        Bitte bestätige deine E-Mail, indem du auf den folgenden Link klickst:
+                        %s
+
+                        Der Link ist zeitlich begrenzt gültig.
+                        """.formatted(link);
+                mail.send(email, subject, body);
+            } catch (Exception ex) {
+                log.warn("E-Mail-Versand fehlgeschlagen (fahre ohne Mail fort): {}", ex.toString()); // NEW
+            }
+        }
 
         return ResponseEntity.ok().build();
     }
@@ -110,23 +146,24 @@ public class AuthController {
 
         if (!user.isEnabled()) {
             user.setEnabled(true);
+            user.setEmailVerifiedAt(Instant.now());
             users.save(user);
         }
-
-        // 204 ist hier passend; Frontend kann auf Erfolg routen
         return ResponseEntity.noContent().build();
     }
 
     // --- Login ---
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginDto dto, HttpServletRequest req,
+    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginDto dto,
+            HttpServletRequest req,
             HttpServletResponse res) {
-        var u = users.findByEmail(dto.email()).orElseThrow(() -> new BadCredentialsException("x"));
+        String email = dto.email().trim().toLowerCase();
+        var u = users.findByEmailWithRoles(email).orElseThrow(() -> new BadCredentialsException("x"));
         if (!u.isEnabled() || !enc.matches(dto.password(), u.getPasswordHash()))
             throw new BadCredentialsException("x");
 
         var access = jwt.createAccessToken(u);
-        var refreshPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID(); // opak
+        var refreshPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         var rt = new RefreshToken();
         rt.setUser(u);
         rt.setTokenHash(sha256(refreshPlain));
@@ -135,18 +172,18 @@ public class AuthController {
         rt.setIp(req.getRemoteAddr());
         tokens.save(rt);
 
-        ResponseCookie cookie = ResponseCookie.from("refresh_token", refreshPlain)
-                .httpOnly(true).secure(true).sameSite("Lax").path("/api/auth").maxAge(Duration.ofDays(14)).build();
-        res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        res.addHeader(HttpHeaders.SET_COOKIE,
+                buildRefreshCookie(refreshPlain, req, Duration.ofDays(14).toSeconds()).toString());
         return ResponseEntity.ok(new TokenResponse(access));
     }
 
-    // --- Refresh ---
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@CookieValue("refresh_token") String refresh,
             HttpServletResponse res) {
         var hash = sha256(refresh);
-        var rt = tokens.findActiveByHash(hash).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        var rt = tokens.findActiveByHashWithUserAndRoles(hash)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+
         if (rt.getExpiresAt().isBefore(Instant.now()) || rt.isRevoked())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
@@ -156,28 +193,32 @@ public class AuthController {
 
         var newPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         var newRt = new RefreshToken();
-        newRt.setUser(rt.getUser()); // <-- FIX: User übernehmen
+        newRt.setUser(rt.getUser()); // User übernehmen (bereits initialisiert)
         newRt.setTokenHash(sha256(newPlain));
         newRt.setExpiresAt(Instant.now().plus(14, ChronoUnit.DAYS));
         newRt.setUserAgent(rt.getUserAgent());
         newRt.setIp(rt.getIp());
         tokens.save(newRt);
 
-        ResponseCookie cookie = ResponseCookie.from("refresh_token", newPlain)
-                .httpOnly(true).secure(true).sameSite("Lax").path("/api/auth").maxAge(Duration.ofDays(14)).build();
+        var access = jwt.createAccessToken(rt.getUser()); // ← wichtig: der geladene User mit Rollen
+        var cookie = ResponseCookie.from("refresh_token", newPlain)
+                .httpOnly(true)
+                .secure(false) // siehe Punkt 2 unten für Dev
+                .sameSite("Lax")
+                .path("/api/auth")
+                .maxAge(Duration.ofDays(14))
+                .build();
         res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
-        var access = jwt.createAccessToken(newRt.getUser());
         return ResponseEntity.ok(new TokenResponse(access));
     }
 
-    // --- Logout ---
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@CookieValue("refresh_token") String refresh, HttpServletResponse res) {
+    public ResponseEntity<Void> logout(@CookieValue("refresh_token") String refresh,
+            HttpServletRequest req, // <-- req hinzufügen
+            HttpServletResponse res) {
         tokens.revokeByHash(sha256(refresh));
-        ResponseCookie clear = ResponseCookie.from("refresh_token", "")
-                .httpOnly(true).secure(true).sameSite("Lax").path("/api/auth").maxAge(0).build();
-        res.addHeader(HttpHeaders.SET_COOKIE, clear.toString());
+        res.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie("", req, 0).toString());
         return ResponseEntity.noContent().build();
     }
 
