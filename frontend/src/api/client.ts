@@ -133,6 +133,9 @@ export const Api = {
     const { data } = await http.get('/me')
     return data
   },
+  async resetPassword(email: string): Promise<void> {
+    await http.post('/auth/reset', { email })
+  },
 
   // Evaluations
   async listEvaluations(): Promise<Evaluation[]> {

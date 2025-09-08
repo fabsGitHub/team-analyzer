@@ -140,11 +140,16 @@ export const useStore = () => {
     await Api.logout()
     state.user = null
     toast($t('toast.signedout'))
-    // Guest mode: local seed
     state.evaluations = [...seed]
     state.evalVersion++
     state.aggregatesCache = null
     state.lastAggVersion = -1
+  }
+
+  // --- Passwort zurücksetzen ---
+  async function resetPassword(email: string) {
+    await Api.resetPassword(email)
+    toast($t('auth.reset_sent'))
   }
 
   function setToken(t: string) {
@@ -250,6 +255,7 @@ export const useStore = () => {
     register,
     logout,
     setToken,
+    resetPassword, // <--- HIER hinzugefügt
     // data
     init,
     addEvaluation,

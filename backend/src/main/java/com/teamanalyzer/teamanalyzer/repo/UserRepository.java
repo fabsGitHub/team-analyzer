@@ -21,4 +21,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmailWithRoles(@Param("email") String email);
 
     boolean existsByEmail(String email);
+
+    // --- Ergänzungen für PasswordResetService ---
+    Optional<User> findByEmailIgnoreCase(String email);
+
+    Optional<User> findByResetToken(String resetToken);
 }

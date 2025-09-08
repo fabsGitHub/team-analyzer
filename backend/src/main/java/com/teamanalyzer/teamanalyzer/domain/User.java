@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.*;
 
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -19,7 +20,8 @@ import lombok.*;
 @Setter
 @Table(name = "users", indexes = {
         @Index(name = "ix_users_email", columnList = "email", unique = true),
-        @Index(name = "ix_users_created_at", columnList = "created_at")
+        @Index(name = "ix_users_created_at", columnList = "created_at"),
+        @Index(name = "ix_users_reset_token", columnList = "reset_token")
 })
 public class User {
 
@@ -71,6 +73,13 @@ public class User {
     @Version
     @Column(name = "version", nullable = false)
     private long version;
+
+    // --- Password Reset ---
+    @Column(name = "reset_token", length = 100, unique = true)
+    private String resetToken;
+
+    @Column(name = "reset_token_created")
+    private Instant resetTokenCreated;
 
     @PrePersist
     @PreUpdate
