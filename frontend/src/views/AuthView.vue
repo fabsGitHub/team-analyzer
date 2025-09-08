@@ -11,11 +11,10 @@
       <input :id="idPwd" class="input" v-model="password" type="password" required autocomplete="current-password"
         minlength="10" />
 
-      <p id="auth-help" class="label">{{ t('auth.go') }} → {{ t('nav.tutorial') }}</p>
-
       <div class="row" style="justify-content:flex-end; gap:.5rem;">
         <button class="btn primary" :disabled="busy">{{ busy ? t('auth.signingin') : t('auth.signin') }}</button>
         <button class="btn" type="button" :disabled="busy" @click="onSignUp">{{ t('auth.signup') }}</button>
+        <button class="btn ghost" type="button" :disabled="busy" @click="onReset">{{ t('auth.reset') }}</button>
       </div>
 
       <p v-if="msg" class="label">{{ msg }}</p>
@@ -33,7 +32,7 @@ import { useStore } from "../store"
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
-const { login, register } = useStore()
+const { login, register, resetPassword } = useStore()
 
 const idEmail = "email-input"
 const idPwd = "password-input"
@@ -92,8 +91,29 @@ async function onSignUp() {
   busy.value = true
   try {
     await register(email.value.trim().toLowerCase(), password.value)
-    // Hinweis für Nutzer mit E-Mail-Verifizierung
     msg.value = t("auth.check_inbox") || "Registriert. Bitte E-Mail öffnen und den Bestätigungslink klicken."
+  } catch (e: any) {
+    if (e?.response?.status === 409) {
+      err.value = t("auth.exists") || "Diese E-Mail ist bereits registriert. Bitte anmelden oder Passwort zurücksetzen."
+    } else {
+      err.value = e?.response?.data?.message || e?.message || String(e)
+    }
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onReset() {
+  err.value = ""
+  msg.value = ""
+  if (!email.value) {
+    err.value = t("auth.enter_email") || "Bitte E-Mail-Adresse eingeben."
+    return
+  }
+  busy.value = true
+  try {
+    await resetPassword(email.value.trim().toLowerCase())
+    msg.value = t("auth.reset_sent") || "Falls registriert, wurde eine E-Mail zum Zurücksetzen gesendet."
   } catch (e: any) {
     err.value = e?.response?.data?.message || e?.message || String(e)
   } finally {

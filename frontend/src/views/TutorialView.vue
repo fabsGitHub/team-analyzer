@@ -1,11 +1,20 @@
 <!-- frontend/src/views/TutorialView.vue -->
 <template>
   <section class="card tutorial">
-    <h1 class="h1">Quickstart</h1>
+    <h1 class="h1">{{ t('tutorial.quickstart') }}</h1>
     <ol class="steps">
-      <li><strong>{{ t('nav.evaluate') }}</strong>: Person + Team + 5 Kategorien (1–5) → Speichern.</li>
-      <li><strong>{{ t('nav.analysis') }}</strong>: max. 3 Teams wählen → Radar vergleichen → Badge klicken für Details.</li>
-      <li>Alles lokal. Keine echten Serverdaten.</li>
+      <li>
+        <strong>{{ t('nav.evaluate') }}</strong>:
+        {{ t('tutorial.step1') }}
+      </li>
+      <li>
+        <strong>{{ t('nav.analysis') }}</strong>:
+        {{ t('tutorial.step2') }}
+      </li>
+      <li>
+        <strong>{{ t('tutorial.tip') }}</strong>:
+        {{ t('tutorial.step3') }}
+      </li>
     </ol>
     <div class="row" style="justify-content:flex-end">
       <RouterLink to="/evaluate" class="btn primary">{{ t('form.add') }}</RouterLink>

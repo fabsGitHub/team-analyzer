@@ -19,8 +19,7 @@
         </div>
 
         <div class="foot">
-            <p class="hint" v-if="series.length">{{ hint }}</p>
-            <p v-else class="label">Keine Daten/Teams ausgewählt.</p>
+            <p class="label">{{ $t('misc.noData') }}</p>
         </div>
     </div>
 </template>
@@ -28,7 +27,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { CATEGORY_KEYS, type CategoryKey } from '../types'
-
+import { useI18n } from 'vue-i18n'
 type Series = { label: string; values: Record<CategoryKey, number> }
 
 /** ➜ NEU: konfigurierbare Props */
@@ -63,7 +62,7 @@ const box = ref<HTMLDivElement | null>(null)   // äußere Karte (.chart-card)
 const wrap = ref<HTMLDivElement | null>(null)  // innere Karte (.canvas-wrap)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const ctx = () => canvas.value!.getContext('2d')!
-
+const { t } = useI18n()
 const colors = ['#b66a2b', '#2b7ab6', '#2b8b5e', '#8a5fb6', '#b62b53', '#2b96b6']
 const activeIndex = ref<number | null>(null)
 
@@ -77,11 +76,11 @@ function hexToRgba(hex: string, a: number) {
     return `rgba(${r},${g},${b},${a})`
 }
 const labelFor = (k: CategoryKey) => ({
-    appreciation: 'Wertschätzung',
-    equality: 'Gleichwertigkeit',
-    workload: 'Arbeitsbelastung',
-    collegiality: 'Umgang',
-    transparency: 'Transparenz'
+    appreciation: t('categories.appreciation'),
+    equality: t('categories.equality'),
+    workload: t('categories.workload'),
+    collegiality: t('categories.collegiality'),
+    transparency: t('categories.transparency')
 }[k])
 
 /* drawing */
@@ -213,8 +212,7 @@ function roundedRect(
 /* a11y/events */
 function onClick() { }
 function onKey() { }
-const hint = 'Tipp: Auf eine Team-Badge klicken, um Details zu öffnen.'
-const a11yDesc = 'Fünfachsiges Radar-Diagramm mit Team-Durchschnittswerten.'
+const a11yDesc = t('analysis.desc')
 
 /* responsive */
 let ro: ResizeObserver | null = null

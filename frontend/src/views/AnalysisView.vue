@@ -69,7 +69,7 @@
 
         <div class="card chart-wrap">
             <div class="chart-box">
-                <RadarChart title="Team-Vergleich" :series="series" :radius-scale="1.25" :center-x="0.5" :center-y="0.5"
+                <RadarChart :title="t('analysis.compare')" :series="series" :radius-scale="1.25" :center-x="0.5" :center-y="0.5"
                     :angle-start-deg="-70" :label-offset="12" :padding="18" :size-px="520"
                     :categories="['workload', 'collegiality', 'transparency', 'appreciation', 'equality']"
                     @select="openDetails" />

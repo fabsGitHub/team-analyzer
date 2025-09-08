@@ -1,8 +1,17 @@
 <!-- frontend/src/components/HeaderNav.vue -->
 <template>
-    <header class="nav" role="banner">
+    <header class="nav" role="banner" v-if="state.state.user">
         <div class="navwrap">
-            <div class="brand" aria-label="App">{{ t('app') }}</div>
+            <div
+                class="brand"
+                aria-label="App"
+                @click="router.push('/analysis')"
+                style="cursor:pointer"
+                tabindex="0"
+                @keydown.enter="router.push('/analysis')"
+            >
+                {{ t('app') }}
+            </div>
 
             <nav v-if="state.state.user" aria-label="Hauptnavigation" class="tabs">
                 <RouterLink class="tab" :aria-current="route.path === '/evaluate' ? 'page' : undefined" to="/evaluate">
@@ -37,7 +46,7 @@
                         <option value="en">English</option>
                     </select>
                     <div class="menu-sep" />
-                    <button class="menu-item" role="menuitem" @click="onLogout">{{ t('auth.logout') || 'Abmelden'
+                    <button class="menu-item" role="menuitem" @click="onLogout">{{ t('user.logout') || 'Abmelden'
                         }}</button>
                 </div>
             </div>
@@ -50,7 +59,10 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useStore } from '../store'
 import { Api } from '../api/client'
-const { t, locale } = useI18n(); const route = useRoute(); const router = useRouter(); const state = useStore()
+const { t, locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const state = useStore()
 function onLang(e: Event) { locale.value = (e.target as HTMLSelectElement).value }
 const menuOpen = ref(false); const toggleMenu = () => menuOpen.value = !menuOpen.value
 const close = () => menuOpen.value = false; const onWindowClick = () => close()

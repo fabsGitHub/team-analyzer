@@ -7,6 +7,11 @@ import VerifyView from './views/VerifyView.vue'
 
 import { useStore } from './store'
 import { Api } from './api/client'
+import ImprintView from './footer/ImprintView.vue'
+import PrivacyView from './footer/PrivacyView.vue'
+import HelpView from './footer/HelpView.vue'
+import ShortcutsView from './footer/ShortcutsView.vue'
+import AboutView from './footer/AboutView.vue'
 
 const routes = [
   { path: '/', redirect: '/auth' },
@@ -15,6 +20,11 @@ const routes = [
   { path: '/evaluate', component: EvaluationView },
   { path: '/analysis', component: AnalysisView },
   { path: '/verify', component: VerifyView },
+  { path: '/imprint', component: ImprintView },
+  { path: '/privacy', component: PrivacyView },
+  { path: '/help', component: HelpView },
+  { path: '/shortcuts', component: ShortcutsView },
+  { path: '/about', component: AboutView },
   { path: '/:pathMatch(.*)*', redirect: '/evaluate' },
 ]
 

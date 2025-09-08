@@ -30,3 +30,10 @@ export interface TeamAggregate {
   count: number
   averages: Record<CategoryKey, number>
 }
+
+// Example state definition
+export interface Toast {
+    id: string;
+    text: string;
+    type?: string;
+}
