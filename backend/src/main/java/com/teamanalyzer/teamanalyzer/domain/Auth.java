@@ -14,13 +14,5 @@ public class Auth {
   private String issuer;
   private long emailVerifyExpMin;
   private String hmacSecret;
-
-  // getters/setters OR use record + @ConstructorBinding
-  public String issuer() { return issuer; }
-  public long emailVerifyExpMin() { return emailVerifyExpMin; }
-  public String hmacSecret() { return hmacSecret; }
-  public void setIssuer(String v) { issuer = v; }
-  public void setEmailVerifyExpMin(long v) { emailVerifyExpMin = v; }
-  public void setHmacSecret(String v) { hmacSecret = v; }
 }
 

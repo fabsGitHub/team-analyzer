@@ -1,9 +1,9 @@
-<!-- frontend/src/App.vue -->
+<!-- src/App.vue -->
 <template>
   <div class="app">
     <HeaderNav />
     <main id="main" class="container" tabindex="-1">
-      <router-view />
+      <RouterView />
     </main>
     <Toast />
     <FooterModal />
@@ -11,16 +11,16 @@
 </template>
 
 <script setup lang="ts">
-import HeaderNav from './components/HeaderNav.vue'
-import Toast from './components/Toast.vue'
-
 import { onMounted } from 'vue'
-import { useStore } from './store'
-import FooterModal from './components/FooterModal.vue'
+import { RouterView } from 'vue-router'
+import { useStore } from '@/store'
+
+import HeaderNav from '@/components/HeaderNav.vue'
+import Toast from '@/components/Toast.vue'
+import FooterModal from '@/components/FooterModal.vue'
 
 const { init } = useStore()
 onMounted(() => { init() })
-
 </script>
 
 <style>

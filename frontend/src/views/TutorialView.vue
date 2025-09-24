@@ -17,7 +17,7 @@
       </li>
     </ol>
     <div class="row" style="justify-content:flex-end">
-      <RouterLink to="/evaluate" class="btn primary">{{ t('form.add') }}</RouterLink>
+      <RouterLink to="/survey" class="btn primary">{{ t('form.add') }}</RouterLink>
     </div>
   </section>
 </template>

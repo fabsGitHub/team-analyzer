@@ -1,6 +1,16 @@
-import axios, { AxiosError } from 'axios'
-import type { Evaluation, TeamAggregate } from '../types'
-import type { AxiosRequestConfig, AxiosResponse } from 'axios'
+import type {
+  SurveyDto,
+  SubmitSurveyRequest,
+  SurveyResultsDto,
+  CreateSurveyRequest,
+  TeamLite,
+  TeamAdminDto,
+} from '@/types'
+import axios, {
+  AxiosError,
+  type AxiosRequestConfig,
+  type AxiosResponse,
+} from 'axios'
 
 const apiBase = (import.meta.env.VITE_API_BASE as string) ?? '/api'
 
@@ -22,12 +32,21 @@ export const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// -- helpers
+function setAuthHeader(headers: any, token: string | undefined) {
+  if (!headers) headers = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  } else {
+    delete headers['Authorization']
+  }
+  return headers
+}
+
 // request: attach Authorization
 http.interceptors.request.use((config) => {
   const token = getToken()
-  if (!config.headers) config.headers = new (axios.AxiosHeaders as any)()
-  if (token) (config.headers as any).Authorization = `Bearer ${token}`
-  else delete (config.headers as any).Authorization
+  config.headers = setAuthHeader(config.headers, token)
   return config
 })
 
@@ -37,9 +56,21 @@ type Waiter = { onToken: (tok: string) => void; onError: (err: any) => void }
 let pending: Waiter[] = []
 
 async function refreshAccessToken(): Promise<string> {
-  const { data } = await http.post<{ accessToken: string }>('/auth/refresh')
+  // Wichtig: diese Anfrage läuft cookie-basiert (refresh_token-Cookie)
+  const { data } = await http.post<{ accessToken: string }>(
+    '/auth/refresh',
+    null,
+    {
+      // beim Refresh KEIN alter Bearer erzwingen
+      headers: { 'Content-Type': 'application/json' },
+    },
+  )
+  // persist + default header aktualisieren
   setToken(data.accessToken)
-  http.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`
+  http.defaults.headers.common = setAuthHeader(
+    http.defaults.headers.common,
+    data.accessToken,
+  )
   return data.accessToken
 }
 
@@ -51,51 +82,55 @@ http.interceptors.response.use(
     const original = error.config as
       | (AxiosRequestConfig & { _retry?: boolean })
       | undefined
-    const url = (original?.url ?? '').toString()
-    const isAuthEndpoint =
-      url.includes('/auth/login') ||
-      url.includes('/auth/register') ||
-      url.includes('/auth/refresh')
 
-    if (
-      !resp ||
-      resp.status !== 401 ||
-      !original ||
-      isAuthEndpoint ||
-      original._retry
-    ) {
+    // Kein config/Response? -> weiterwerfen
+    if (!original || !resp) {
       return Promise.reject(error)
     }
 
+    // Auth-Endpoints selbst nie refreshen
+    const url = (original.url ?? '').toString()
+    const isAuthEndpoint =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/logout')
+
+    // Nur bei 401, nicht bei bereits geretryten Requests
+    if (resp.status !== 401 || isAuthEndpoint || original._retry) {
+      return Promise.reject(error)
+    }
+
+    // Markiere als Retry
     original._retry = true
 
+    // Refresh orchestrieren (nur einmal parallel)
     if (!isRefreshing) {
       isRefreshing = true
       try {
         const newTok = await refreshAccessToken()
-        if (!original.headers) original.headers = {}
-        ;(original.headers as any).Authorization = `Bearer ${newTok}`
-        const retryResponse: AxiosResponse = await http(original)
+        // ausstehende waiters informieren
         pending.forEach((w) => w.onToken(newTok))
         pending = []
-        return retryResponse
       } catch (e) {
         pending.forEach((w) => w.onError(e))
         pending = []
         setToken('')
-        delete http.defaults.headers.common.Authorization
+        delete (http.defaults.headers as any).common?.Authorization
+        isRefreshing = false
         throw e
       } finally {
         isRefreshing = false
       }
     }
 
-    return new Promise((resolve, reject) => {
+    // Warten bis refresh fertig, dann original erneut senden
+    return new Promise<AxiosResponse>((resolve, reject) => {
       pending.push({
         onToken: (tok) => {
-          if (!original.headers) original.headers = {}
-          ;(original.headers as any).Authorization = `Bearer ${tok}`
-          http(original).then(resolve).catch(reject)
+          // Header des ursprünglichen Requests mit neuem Token bestücken
+          original.headers = setAuthHeader(original.headers, tok)
+          http.request(original).then(resolve).catch(reject)
         },
         onError: (err) => reject(err),
       })
@@ -118,7 +153,10 @@ export const Api = {
       password,
     })
     setToken(data.accessToken)
-    http.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`
+    http.defaults.headers.common = setAuthHeader(
+      http.defaults.headers.common,
+      data.accessToken,
+    )
     return data
   },
   async logout(): Promise<void> {
@@ -126,10 +164,10 @@ export const Api = {
       await http.post('/auth/logout')
     } finally {
       setToken('')
-      delete http.defaults.headers.common.Authorization
+      delete (http.defaults.headers as any).common?.Authorization
     }
   },
-  async me(): Promise<{ email: string; roles: string[] }> {
+  async me(): Promise<{ email: string; roles: string[]; id: string, isLeader: boolean }> {
     const { data } = await http.get('/me')
     return data
   },
@@ -137,24 +175,82 @@ export const Api = {
     await http.post('/auth/reset', { email })
   },
 
-  // Evaluations
-  async listEvaluations(): Promise<Evaluation[]> {
-    const { data } = await http.get<Evaluation[]>('/evaluations')
+  // --- Surveys (öffentlich/leader/admin kombi) ---
+  async getSurvey(id: string): Promise<SurveyDto> {
+    const { data } = await http.get<SurveyDto>(`/surveys/${id}`)
     return data
-  },
-  async createEvaluation(e: Evaluation) {
-    return http.post('/evaluations', e)
-  },
-  async updateEvaluation(id: string, patch: Partial<Evaluation>) {
-    return http.put(`/evaluations/${id}`, patch)
-  },
-  async deleteEvaluation(id: string) {
-    return http.delete(`/evaluations/${id}`)
   },
 
-  // Aggregates
-  async getAggregatedResults(): Promise<TeamAggregate[]> {
-    const { data } = await http.get<TeamAggregate[]>('/aggregates')
+  async submitSurveyResponses(
+    id: string,
+    body: SubmitSurveyRequest,
+  ): Promise<void> {
+    await http.post(`/surveys/${id}/responses`, body)
+  },
+
+  async getSurveyResults(id: string): Promise<SurveyResultsDto> {
+    const { data } = await http.get<SurveyResultsDto>(`/surveys/${id}/results`)
     return data
+  },
+
+  async createSurvey(payload: CreateSurveyRequest): Promise<SurveyDto> {
+    const { data } = await http.post<SurveyDto>('/surveys', payload)
+    return data
+  },
+
+  async issueSurveyTokens(id: string, count: number): Promise<string[]> {
+    const { data } = await http.post<string[]>(`/surveys/${id}/tokens/batch`, {
+      count,
+    })
+    return data
+  },
+
+  buildSurveyInviteLink(surveyId: string, token: string): string {
+    const base = window.location.origin
+    return `${base}/surveys/${surveyId}?token=${encodeURIComponent(token)}`
+  },
+
+  // --- Leader: eigene Teams (für DropDown) ---
+  async myTeams(): Promise<TeamLite[]> {
+    const { data } = await http.get<TeamLite[]>('/me/teams')
+    return data
+  },
+
+  // --- Admin: Teamverwaltung ---
+  async listTeamsAdmin(): Promise<TeamAdminDto[]> {
+    const { data } = await http.get<TeamAdminDto[]>('/admin/teams')
+    return data
+  },
+
+  async createTeamAdmin(name: string, leaderUserId: string): Promise<void> {
+    await http.post('/admin/teams', null, { params: { name, leaderUserId } })
+  },
+
+  async addMemberAdmin(
+    teamId: string,
+    userId: string,
+    leader = false,
+  ): Promise<void> {
+    await http.post(`/admin/teams/${teamId}/members`, null, {
+      params: { userId, leader },
+    })
+  },
+
+  async setLeaderAdmin(
+    teamId: string,
+    userId: string,
+    leader: boolean,
+  ): Promise<void> {
+    await http.patch(`/admin/teams/${teamId}/leader`, null, {
+      params: { userId, leader },
+    })
+  },
+
+  async removeMemberAdmin(teamId: string, userId: string): Promise<void> {
+    await http.delete(`/admin/teams/${teamId}/members/${userId}`)
+  },
+
+  async deleteTeamAdmin(teamId: string): Promise<void> {
+    await http.delete(`/admin/teams/${teamId}`)
   },
 }

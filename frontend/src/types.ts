@@ -1,39 +1,59 @@
-// frontend/src/types.ts
-export type CategoryKey =
-  | 'appreciation'
-  | 'equality'
-  | 'workload'
-  | 'collegiality'
-  | 'transparency'
-export const CATEGORY_KEYS: CategoryKey[] = [
-  'appreciation',
-  'equality',
-  'workload',
-  'collegiality',
-  'transparency',
-]
 export type TeamId = string
-export interface Evaluation {
-  id: String
-  name: string
-  team: TeamId
-  appreciation: number
-  equality: number
-  workload: number
-  collegiality: number
-  transparency: number
-  createdAt: string
-  updatedAt: string
+
+export interface SurveyQuestion {
+  id: string
+  idx: number
+  text: string
 }
-export interface TeamAggregate {
-  team: TeamId
-  count: number
-  averages: Record<CategoryKey, number>
+export interface SurveyDto {
+  id: string
+  title: string
+  questions: SurveyQuestion[]
+}
+export interface SubmitSurveyRequest {
+  token: string
+  q1: number
+  q2: number
+  q3: number
+  q4: number
+  q5: number
+}
+export interface SurveyResultsDto {
+  q1: number
+  q2: number
+  q3: number
+  q4: number
+  q5: number
+  responses: number
+}
+export interface CreateSurveyRequest {
+  teamId: string
+  title: string
+  questions: [string, string, string, string, string]
+}
+export interface TeamLite {
+  id: string
+  name: string
+}
+export interface TeamMemberDto {
+  userId: string
+  leader: boolean
+}
+export interface TeamAdminDto extends TeamLite {
+  members: TeamMemberDto[]
 }
 
-// Example state definition
+// falls noch nicht vorhanden:
 export interface Toast {
-    id: string;
-    text: string;
-    type?: string;
+  id: string
+  text: string
+  type?: 'success' | 'danger' | 'info' | 'warning'
 }
+
+export type Role = 'USER' | 'ROLE_ADMIN' | 'ROLE_TEAM_LEADER'
+
+export const Roles = {
+  ADMIN: 'ROLE_ADMIN',
+  TEAM_LEADER: 'ROLE_TEAM_LEADER',
+  USER: 'USER'
+} as const

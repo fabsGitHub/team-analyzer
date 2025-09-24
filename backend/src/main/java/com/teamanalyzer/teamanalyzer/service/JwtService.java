@@ -49,10 +49,9 @@ public class JwtService {
     }
 
     public String createAccessToken(User u) {
-        // ACHTUNG: u.getRoles() muss initialisiert sein (EntityGraph oder einmaliges
-        // Access im Login)!
+        // NOTE: u.getRoles() sollte initialisiert sein (z.B. via EntityGraph)
         List<String> roles = (u.getRoles() == null)
-                ? List.<String>of()
+                ? List.of()
                 : u.getRoles().stream()
                         .map(r -> String.valueOf(r.name()))
                         .collect(Collectors.toList());
@@ -62,7 +61,8 @@ public class JwtService {
 
         var claims = new JWTClaimsSet.Builder()
                 .issuer(issuer)
-                .subject(u.getEmail())
+                .subject(u.getEmail())                 // = email
+                .claim("uid", u.getId().toString())    // <-- UserId mitgeben
                 .claim("email", u.getEmail())
                 .claim("roles", roles)
                 .issueTime(now)
@@ -81,7 +81,7 @@ public class JwtService {
     public JWTClaimsSet validate(String token) {
         try {
             var jwt = SignedJWT.parse(token);
-            var verifier = new MACVerifier(key); // prüft inkl. passender Keylänge zur im Header angegebenen alg
+            var verifier = new MACVerifier(key);
             if (!jwt.verify(verifier)) {
                 throw new BadCredentialsException("Invalid signature");
             }

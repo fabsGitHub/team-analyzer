@@ -29,7 +29,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.UUID;
 
 @RestController

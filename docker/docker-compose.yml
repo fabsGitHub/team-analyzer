@@ -44,5 +44,18 @@ services:
     ports: ["5173:80"]
     depends_on: [backend]
 
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: "0"   # nur Verbindungen zum 'db'-Service erlauben
+      UPLOAD_LIMIT: 128M
+    ports:
+      - "127.0.0.1:8082:80"  # nur lokal exposen
 volumes:
   dbdata: {}

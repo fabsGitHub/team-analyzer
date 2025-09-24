@@ -1,8 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AuthView from './views/AuthView.vue'
-import AnalysisView from './views/AnalysisView.vue'
 import TutorialView from './views/TutorialView.vue'
-import EvaluationView from './views/EvaluationView.vue'
 import VerifyView from './views/VerifyView.vue'
 
 import { useStore } from './store'
@@ -12,13 +10,14 @@ import PrivacyView from './footer/PrivacyView.vue'
 import HelpView from './footer/HelpView.vue'
 import ShortcutsView from './footer/ShortcutsView.vue'
 import AboutView from './footer/AboutView.vue'
+import SurveyView from './views/SurveyView.vue'
+import SurveyManageView from './views/SurveyManageView.vue'
+import AdminTeamView from './views/AdminTeamView.vue'
 
 const routes = [
   { path: '/', redirect: '/auth' },
   { path: '/auth', component: AuthView },
   { path: '/tutorial', component: TutorialView },
-  { path: '/evaluate', component: EvaluationView },
-  { path: '/analysis', component: AnalysisView },
   { path: '/verify', component: VerifyView },
   { path: '/imprint', component: ImprintView },
   { path: '/privacy', component: PrivacyView },
@@ -26,6 +25,23 @@ const routes = [
   { path: '/shortcuts', component: ShortcutsView },
   { path: '/about', component: AboutView },
   { path: '/:pathMatch(.*)*', redirect: '/evaluate' },
+  {
+    path: '/surveys/:id',
+    name: 'Survey',
+    component: SurveyView,
+  },
+  {
+    path: '/leader/surveys',
+    name: 'SurveyManage',
+    component: SurveyManageView,
+    meta: { requiresRole: ['leader', 'admin'] },
+  },
+  {
+    path: '/admin/teams',
+    name: 'TeamAdmin',
+    component: AdminTeamView,
+    meta: { requiresRole: ['admin'] },
+  },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

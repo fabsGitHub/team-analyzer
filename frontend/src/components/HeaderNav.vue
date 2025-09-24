@@ -2,23 +2,19 @@
 <template>
     <header class="nav" role="banner" v-if="state.state.user">
         <div class="navwrap">
-            <div
-                class="brand"
-                aria-label="App"
-                @click="router.push('/analysis')"
-                style="cursor:pointer"
-                tabindex="0"
-                @keydown.enter="router.push('/analysis')"
-            >
+            <div class="brand" aria-label="App" @click="router.push('/analysis')" style="cursor:pointer" tabindex="0"
+                @keydown.enter="router.push('/analysis')">x
                 {{ t('app') }}
             </div>
 
             <nav v-if="state.state.user" aria-label="Hauptnavigation" class="tabs">
-                <RouterLink class="tab" :aria-current="route.path === '/evaluate' ? 'page' : undefined" to="/evaluate">
-                    {{ t('nav.evaluate') }}
+                <RouterLink v-if="state.state.user?.roles.includes(Roles.ADMIN)" class="tab"
+                    :aria-current="route.path === '/admin/teams' ? 'page' : undefined" to="/admin/teams">
+                    {{ t('nav.admin') }}
                 </RouterLink>
-                <RouterLink class="tab" :aria-current="route.path === '/analysis' ? 'page' : undefined" to="/analysis">
-                    {{ t('nav.analysis') }}
+                <RouterLink v-if="state.state.user?.isLeader === true" class="tab"
+                    :aria-current="route.path === '/leader/surveys' ? 'page' : undefined" to="/leader/surveys">
+                    {{ t('nav.createSurvey') }}
                 </RouterLink>
                 <RouterLink class="tab" :aria-current="route.path === '/tutorial' ? 'page' : undefined" to="/tutorial">
                     {{ t('nav.tutorial') }}
@@ -37,6 +33,8 @@
                 <div v-show="menuOpen" class="menu" role="menu" @click.stop>
                     <div class="menu-header">
                         <div class="menu-email">{{ state.state.user?.email }}</div>
+                        <div class="menu-email">{{ state.state.user?.id }}</div>
+                        <div class="menu-email">{{ state.state.user?.roles.join(', ') }}</div>
                     </div>
                     <div class="menu-sep" />
                     <!-- Sprache ins Menü -->
@@ -59,6 +57,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useStore } from '../store'
 import { Api } from '../api/client'
+import { Roles } from '@/types'
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
