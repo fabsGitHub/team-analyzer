@@ -97,6 +97,16 @@ http.interceptors.response.use(
       url.includes('/auth/refresh') ||
       url.includes('/auth/logout')
 
+    // 403: Admin access denied redirect
+    if (resp.status === 403) {
+      const path = (original?.url ?? '').toString()
+      // alles unter /admin/ führt bei 403 auf /my/tokens
+      if (path.startsWith('/admin/')) {
+        window.location.replace('/my/tokens?denied=admin')
+      }
+      return Promise.reject(error)
+    }
+
     // Nur bei 401, nicht bei bereits geretryten Requests
     if (resp.status !== 401 || isAuthEndpoint || original._retry) {
       return Promise.reject(error)

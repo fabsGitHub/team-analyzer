@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.teamanalyzer.teamanalyzer.domain.TeamMember;
 import com.teamanalyzer.teamanalyzer.domain.TeamMemberKey;
 
-
 public interface TeamMemberRepository extends JpaRepository<TeamMember, TeamMemberKey> {
 
     // Liste aller Mitglieder eines Teams

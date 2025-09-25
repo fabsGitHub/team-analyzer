@@ -47,7 +47,7 @@ export type Role = 'USER' | 'ROLE_ADMIN' | 'ROLE_TEAM_LEADER'
 
 export const Roles = {
   ADMIN: 'ROLE_ADMIN',
-  TEAM_LEADER: 'ROLE_TEAM_LEADER',
+  LEADER: 'ROLE_LEADER',
   USER: 'USER',
 } as const
 

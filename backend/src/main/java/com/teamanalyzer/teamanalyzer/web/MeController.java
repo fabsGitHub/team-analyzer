@@ -70,7 +70,7 @@ public class MeController {
     public List<com.teamanalyzer.teamanalyzer.web.dto.SurveyDto> getMySurveys(Authentication auth) {
         var au = (AuthUser) auth.getPrincipal();
         var userId = au.userId();
-        return surveyRepository.findByCreatedBy(userId).stream()
+        return surveyRepository.findByCreatedByWithTeamAndQuestions(userId).stream()
                 .map(s -> com.teamanalyzer.teamanalyzer.web.dto.SurveyDto.from(s, s.getQuestions()))
                 .toList();
     }

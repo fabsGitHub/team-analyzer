@@ -12,14 +12,14 @@
                     :aria-current="route.path === '/admin/teams' ? 'page' : undefined" to="/admin/teams">
                     {{ t('nav.admin') }}
                 </RouterLink>
-                <RouterLink v-if="state.state.user?.isLeader === true" class="tab"
+                <RouterLink v-if="state.state.user?.roles.includes(Roles.LEADER)" class="tab"
                     :aria-current="route.path === '/leader/surveys' ? 'page' : undefined" to="/leader/surveys">
                     {{ t('nav.createSurvey') }}
                 </RouterLink>
-                <RouterLink class="tab" :aria-current="route.path === '/my/tokens' ? 'page' : undefined" to="/my/tokens">
+                <RouterLink class="tab" :aria-current="route.path === '/my/tokens' ? 'page' : undefined"
+                    to="/my/tokens">
                     {{ t('nav.myTokens') }}
                 </RouterLink>
-                
             </nav>
 
             <div v-if="state.state.user" class="user" @keydown.escape="menuOpen = false">
@@ -46,7 +46,7 @@
                     </select>
                     <div class="menu-sep" />
                     <button class="menu-item" role="menuitem" @click="onLogout">{{ t('user.logout') || 'Abmelden'
-                        }}</button>
+                    }}</button>
                 </div>
             </div>
         </div>
