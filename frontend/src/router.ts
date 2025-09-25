@@ -13,6 +13,7 @@ import AboutView from './footer/AboutView.vue'
 import SurveyView from './views/SurveyView.vue'
 import SurveyManageView from './views/SurveyManageView.vue'
 import AdminTeamView from './views/AdminTeamView.vue'
+import MyTokensView from './views/MyTokensView.vue'
 
 const routes = [
   { path: '/', redirect: '/auth' },
@@ -29,6 +30,11 @@ const routes = [
     path: '/surveys/:id',
     name: 'Survey',
     component: SurveyView,
+  },
+  {
+    path: '/my/tokens',
+    name: 'MyToken',
+    component: MyTokensView,
   },
   {
     path: '/leader/surveys',

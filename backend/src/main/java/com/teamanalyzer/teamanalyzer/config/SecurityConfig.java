@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,11 +20,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.teamanalyzer.teamanalyzer.filter.JwtAuthFilter;
 
-import lombok.RequiredArgsConstructor;
-
 @Configuration
 @EnableMethodSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
   @Bean
@@ -38,30 +36,28 @@ public class SecurityConfig {
         .cors(Customizer.withDefaults())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
+            // Preflight erlauben
+            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-            .requestMatchers("/api/auth/**", "/error").permitAll() // /error erlauben!
-            
-            // Auth & Health offen
-            .requestMatchers("/api/auth/**", "/actuator/health").permitAll()
+            // offen
+            .requestMatchers("/error", "/actuator/health", "/api/auth/**").permitAll()
 
-            // --- Survey-Teilnahme anonym ---
+            // öffentliche Survey-Endpunkte
             .requestMatchers(HttpMethod.GET, "/api/surveys/*").permitAll()
             .requestMatchers(HttpMethod.POST, "/api/surveys/*/responses").permitAll()
 
-            // --- Survey-Management nur Leader/Admin ---
-            .requestMatchers("/api/surveys/**").hasAnyRole("LEADER", "ADMIN")
+            // Survey-Management nur eingeloggt; fachliche Prüfung macht der Controller
+            .requestMatchers("/api/surveys/**").authenticated()
 
-            // --- Admin-Bereich ---
+            // Admin-Bereich
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-            // (optional) statische Inhalte / Swagger etc. hier freischalten
-
-            // alles andere braucht Login
+            // Rest
             .anyRequest().authenticated())
         .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class)
         .exceptionHandling(e -> e
-            .authenticationEntryPoint((req, res, ex) -> res.setStatus(401))
-            .accessDeniedHandler((req, res, ex) -> res.setStatus(403)));
+            .authenticationEntryPoint((req, res, ex) -> res.setStatus(HttpStatus.UNAUTHORIZED.value()))
+            .accessDeniedHandler((req, res, ex) -> res.setStatus(HttpStatus.FORBIDDEN.value())));
 
     return http.build();
   }
@@ -69,7 +65,6 @@ public class SecurityConfig {
   @Bean
   CorsConfigurationSource cors() {
     var cfg = new CorsConfiguration();
-    // Falls du zusätzlich Prod-Origins hast: füg sie hier hinzu
     cfg.setAllowedOrigins(List.of("http://localhost:5173"));
     cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));

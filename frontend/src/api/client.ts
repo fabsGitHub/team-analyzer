@@ -5,6 +5,7 @@ import type {
   CreateSurveyRequest,
   TeamLite,
   TeamAdminDto,
+  MyOpenToken,
 } from '@/types'
 import axios, {
   AxiosError,
@@ -167,7 +168,12 @@ export const Api = {
       delete (http.defaults.headers as any).common?.Authorization
     }
   },
-  async me(): Promise<{ email: string; roles: string[]; id: string, isLeader: boolean }> {
+  async me(): Promise<{
+    email: string
+    roles: string[]
+    id: string
+    isLeader: boolean
+  }> {
     const { data } = await http.get('/me')
     return data
   },
@@ -211,8 +217,10 @@ export const Api = {
   },
 
   // --- Leader: eigene Teams (für DropDown) ---
-  async myTeams(): Promise<TeamLite[]> {
-    const { data } = await http.get<TeamLite[]>('/me/teams')
+  async myTeams(leaderOnly = true): Promise<TeamLite[]> {
+    const { data } = await http.get<TeamLite[]>('/me/teams', {
+      params: { leaderOnly },
+    })
     return data
   },
 
@@ -256,6 +264,32 @@ export const Api = {
 
   async listMySurveys(): Promise<(SurveyDto & { teamName?: string })[]> {
     const { data } = await http.get('/me/surveys')
+    return data
+  },
+
+  async ensureTokensForTeam(surveyId: string): Promise<{ created: number }> {
+    const { data } = await http.post<{ created: number }>(
+      `/surveys/${surveyId}/tokens/for-members`,
+    )
+    return data
+  },
+
+  async myTokenForSurvey(
+    surveyId: string,
+  ): Promise<{ created: boolean; inviteLink?: string }> {
+    const { data } = await http.get(`/surveys/${surveyId}/my-token`)
+    return data
+  },
+
+  async renewMyToken(
+    surveyId: string,
+  ): Promise<{ created: boolean; inviteLink: string }> {
+    const { data } = await http.post(`/surveys/${surveyId}/my-token/renew`)
+    return data
+  },
+
+  async listMyOpenTokens(): Promise<MyOpenToken[]> {
+    const { data } = await http.get<MyOpenToken[]>('/my/tokens')
     return data
   },
 }

@@ -5,12 +5,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
@@ -53,11 +56,13 @@ public class MeController {
     }
 
     @GetMapping("/me/teams")
-    public List<TeamLiteView> myTeams(Authentication auth) {
-        var au = (AuthUser) auth.getPrincipal();
-        var userId = au.userId();
-        return teamRepository
-                .findDistinctByMembers_User_IdAndMembers_LeaderTrue(userId);
+    public List<TeamLiteView> myTeams(@AuthenticationPrincipal AuthUser me,
+            @RequestParam(defaultValue = "false") boolean leaderOnly) {
+        if (me == null || me.userId() == null)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        return leaderOnly
+                ? teamRepository.findDistinctByMembers_User_IdAndMembers_LeaderTrue(me.userId())
+                : teamRepository.findDistinctByMembers_User_Id(me.userId());
     }
 
     @GetMapping("me/surveys")

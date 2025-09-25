@@ -67,3 +67,10 @@ export type SurveyResultsDto = {
   n: number
   items: SingleSurveyResultDto[]
 }
+
+export type MyOpenToken = {
+  tokenId: string
+  surveyId: string
+  surveyTitle: string
+  issuedAt: string
+}

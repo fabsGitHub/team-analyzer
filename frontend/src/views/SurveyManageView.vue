@@ -18,6 +18,8 @@
 
         <div v-if="surveyId" class="mt-4">
             <h2>Tokens erzeugen</h2>
+            <button class="btn" @click="issueTeam">Für Team erzeugen</button>
+
             <div class="form-row">
                 <input v-model.number="tokenCount" type="number" min="1" class="input" />
                 <button class="btn" @click="issue">Erzeugen</button>
@@ -97,6 +99,7 @@ async function create() {
     });
     surveyId.value = dto.id;
     // Nach dem Erstellen neu laden
+    issueTeam();
     surveys.value = await Api.listMySurveys();
 }
 
@@ -121,6 +124,13 @@ async function downloadJson(id: string) {
     a.remove();
     URL.revokeObjectURL(url);
 }
+
+async function issueTeam() {
+    if (!surveyId.value) return
+    const { created } = await Api.ensureTokensForTeam(surveyId.value)
+    alert(`${created} neue Tokens für Teammitglieder erstellt.`)
+}
+
 </script>
 
 <style scoped>

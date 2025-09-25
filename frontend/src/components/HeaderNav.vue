@@ -16,9 +16,10 @@
                     :aria-current="route.path === '/leader/surveys' ? 'page' : undefined" to="/leader/surveys">
                     {{ t('nav.createSurvey') }}
                 </RouterLink>
-                <RouterLink class="tab" :aria-current="route.path === '/tutorial' ? 'page' : undefined" to="/tutorial">
-                    {{ t('nav.tutorial') }}
+                <RouterLink class="tab" :aria-current="route.path === '/my/tokens' ? 'page' : undefined" to="/my/tokens">
+                    {{ t('nav.myTokens') }}
                 </RouterLink>
+                
             </nav>
 
             <div v-if="state.state.user" class="user" @keydown.escape="menuOpen = false">

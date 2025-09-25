@@ -5,9 +5,6 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -33,6 +30,7 @@ public class SurveyService {
     private final SurveyQuestionRepository questionRepo;
     private final SurveyResponseRepository responseRepo;
     private final TeamMemberRepository tmRepo;
+    private final TokenService tokenService;
 
     public Survey createSurvey(UUID leaderId, UUID teamId, String title, List<String> qTexts) {
         // Nur Team-Leader des Teams dürfen Surveys erstellen
@@ -71,16 +69,22 @@ public class SurveyService {
         if (answers == null || answers.length != 5)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Require 5 answers");
 
-        SurveyResponse r = new SurveyResponse();
-        Survey sRef = new Survey();
+        var sRef = new Survey();
         sRef.setId(surveyId);
+
+        var r = new SurveyResponse();
         r.setSurvey(sRef);
-        r.setToken(tok);
+        r.setToken(tok); // kurzzeitig referenzieren
         r.setQ1(answers[0]);
         r.setQ2(answers[1]);
         r.setQ3(answers[2]);
         r.setQ4(answers[3]);
         r.setQ5(answers[4]);
+
+        responseRepo.save(r);
+
+        // Token aus Response lösen & in der DB löschen (gleiche TX)
+        tokenService.consumeAndDeleteToken(r, tok);
         responseRepo.save(r);
     }
 
