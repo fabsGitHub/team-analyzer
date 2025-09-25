@@ -28,13 +28,36 @@
                 </li>
             </ul>
         </div>
+
+        <!-- NEU: Liste existierender Surveys -->
+        <div class="mt-4">
+            <h2>Meine Surveys</h2>
+            <ul>
+                <li v-for="s in surveys" :key="s.id">
+                    <strong>{{ s.title }}</strong>
+                    <span v-if="s.teamName">({{ s.teamName }})</span>
+                    <RouterLink :to="`/surveys/${s.id}`">Details</RouterLink>
+                    <RouterLink :to="`/surveys/${s.id}/results`" class="btn" style="margin-left:1em">
+                        Ergebnisse
+                    </RouterLink>
+
+                    <!-- optional: add a JSON download button that uses axios -->
+                    <button class="btn" style="margin-left:.5em" @click="downloadJson(s.id)">
+                        JSON export
+                    </button>
+                </li>
+            </ul>
+        </div>
     </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, nextTick } from "vue";
 import { Api } from "@/api/client";
-import type { TeamLite } from "@/types";
+import type { TeamLite, SurveyDto } from "@/types";
+import { RouterLink } from "vue-router";
+import { useStore } from "@/store";
+
 
 const title = ref("");
 const teamId = ref<string>("");
@@ -45,17 +68,24 @@ const surveyId = ref<string>("");
 const tokenCount = ref(10);
 const tokens = ref<string[]>([]);
 
+const surveys = ref<(SurveyDto & { teamName?: string })[]>([]);
+
+const state = useStore();
+
 onMounted(async () => {
     const teams = await Api.myTeams();
     myTeams.value = teams;
-    await nextTick();                 // DOM/Options sind da
-    teamId.value = teams[0]?.id ?? ""; // jetzt selektieren
-});
+    await nextTick();
+    teamId.value = teams[0]?.id ?? "";
 
+    // NEU: Surveys laden, bei denen der User Leader ist
+    surveys.value = await Api.listMySurveys();
+});
 
 async function create() {
     const dto = await Api.createSurvey({
         teamId: teamId.value,
+        createdBy: state.state.user?.id || "-1", // wird vom Backend gesetzt
         title: title.value.trim(),
         questions: [
             questions.value[0].trim(),
@@ -66,6 +96,8 @@ async function create() {
         ]
     });
     surveyId.value = dto.id;
+    // Nach dem Erstellen neu laden
+    surveys.value = await Api.listMySurveys();
 }
 
 async function issue() {
@@ -77,7 +109,18 @@ function inviteLink(tok: string): string {
     return Api.buildSurveyInviteLink(surveyId.value, tok);
 }
 
-
+async function downloadJson(id: string) {
+    const data = await Api.getSurveyResults(id); // goes through axios + auth
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `survey-${id}-results.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
 </script>
 
 <style scoped>

@@ -7,16 +7,19 @@ import java.util.UUID;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
+import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamLiteView;
 import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamRepository;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api")
@@ -25,6 +28,7 @@ public class MeController {
 
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRepository teamRepository;
+    private final SurveyRepository surveyRepository;
 
     @GetMapping("/me")
     public Map<String, Object> me(Authentication auth) {
@@ -55,4 +59,15 @@ public class MeController {
         return teamRepository
                 .findDistinctByMembers_User_IdAndMembers_LeaderTrue(userId);
     }
+
+    @GetMapping("me/surveys")
+    @Transactional(readOnly = true)
+    public List<com.teamanalyzer.teamanalyzer.web.dto.SurveyDto> getMySurveys(Authentication auth) {
+        var au = (AuthUser) auth.getPrincipal();
+        var userId = au.userId();
+        return surveyRepository.findByCreatedBy(userId).stream()
+                .map(s -> com.teamanalyzer.teamanalyzer.web.dto.SurveyDto.from(s, s.getQuestions()))
+                .toList();
+    }
+
 }

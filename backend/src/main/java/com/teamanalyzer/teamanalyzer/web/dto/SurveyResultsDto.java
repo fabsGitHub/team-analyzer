@@ -1,15 +1,13 @@
 package com.teamanalyzer.teamanalyzer.web.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import java.util.List;
 
-@Data
-@AllArgsConstructor(staticName = "of")
-public class SurveyResultsDto {
-    private double q1;
-    private double q2;
-    private double q3;
-    private double q4;
-    private double q5;
-    private int responses;
+public record SurveyResultsDto(
+        double a1, double a2, double a3, double a4, double a5,
+        int n,
+        List<SingleSurveyResultDto> items) {
+    public static SurveyResultsDto of(double a1, double a2, double a3, double a4, double a5, int n,
+            List<SingleSurveyResultDto> items) {
+        return new SurveyResultsDto(a1, a2, a3, a4, a5, n, items);
+    }
 }

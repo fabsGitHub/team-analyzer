@@ -18,17 +18,10 @@ export interface SubmitSurveyRequest {
   q4: number
   q5: number
 }
-export interface SurveyResultsDto {
-  q1: number
-  q2: number
-  q3: number
-  q4: number
-  q5: number
-  responses: number
-}
 export interface CreateSurveyRequest {
   teamId: string
   title: string
+  createdBy: string
   questions: [string, string, string, string, string]
 }
 export interface TeamLite {
@@ -55,5 +48,22 @@ export type Role = 'USER' | 'ROLE_ADMIN' | 'ROLE_TEAM_LEADER'
 export const Roles = {
   ADMIN: 'ROLE_ADMIN',
   TEAM_LEADER: 'ROLE_TEAM_LEADER',
-  USER: 'USER'
+  USER: 'USER',
 } as const
+
+export type SingleSurveyResultDto = {
+  q1: number
+  q2: number
+  q3: number
+  q4: number
+  q5: number
+}
+export type SurveyResultsDto = {
+  a1: number
+  a2: number
+  a3: number
+  a4: number
+  a5: number
+  n: number
+  items: SingleSurveyResultDto[]
+}

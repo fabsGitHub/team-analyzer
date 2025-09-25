@@ -85,15 +85,6 @@ public class SurveyService {
     }
 
     public SurveyResultsDto getResults(UUID requesterId, UUID surveyId) {
-        Survey s = surveyRepo.findById(surveyId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-
-        boolean isAdmin = hasRole("ROLE_ADMIN");
-        boolean isLeaderOfTeam = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(s.getTeam().getId(), requesterId);
-
-        if (!(isAdmin || isLeaderOfTeam)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to view results");
-        }
 
         List<SurveyResponse> all = responseRepo.findBySurveyId(surveyId);
 
@@ -105,20 +96,18 @@ public class SurveyService {
             sum[3] += r.getQ4();
             sum[4] += r.getQ5();
         }
-        int n = Math.max(all.size(), 1);
-        double a1 = sum[0] / n, a2 = sum[1] / n, a3 = sum[2] / n, a4 = sum[3] / n, a5 = sum[4] / n;
 
-        return SurveyResultsDto.of(a1, a2, a3, a4, a5, all.size());
-    }
+        int n = all.size();
+        double a1 = n == 0 ? 0 : sum[0] / n;
+        double a2 = n == 0 ? 0 : sum[1] / n;
+        double a3 = n == 0 ? 0 : sum[2] / n;
+        double a4 = n == 0 ? 0 : sum[3] / n;
+        double a5 = n == 0 ? 0 : sum[4] / n;
 
-    private boolean hasRole(String role) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null)
-            return false;
-        for (GrantedAuthority ga : auth.getAuthorities()) {
-            if (role.equals(ga.getAuthority()))
-                return true;
-        }
-        return false;
+        var items = all.stream()
+                .map(com.teamanalyzer.teamanalyzer.web.dto.SingleSurveyResultDto::from)
+                .toList();
+
+        return com.teamanalyzer.teamanalyzer.web.dto.SurveyResultsDto.of(a1, a2, a3, a4, a5, n, items);
     }
 }

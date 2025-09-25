@@ -42,6 +42,13 @@ const routes = [
     component: AdminTeamView,
     meta: { requiresRole: ['admin'] },
   },
+  // src/router/index.ts
+  {
+    path: '/surveys/:id/results',
+    name: 'survey-results',
+    component: () => import('@/views/SurveyResultsView.vue'),
+  },
+  
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

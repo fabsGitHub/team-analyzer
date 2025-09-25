@@ -14,6 +14,7 @@ import lombok.Data;
 public class SurveyDto {
     private UUID id;
     private String title;
+    private UUID createdBy;
     private List<Question> questions;
 
     @Data
@@ -25,7 +26,7 @@ public class SurveyDto {
     }
 
     public static SurveyDto from(Survey s, List<SurveyQuestion> qs) {
-        return new SurveyDto(s.getId(), s.getTitle(),
+        return new SurveyDto(s.getId(), s.getTitle(), s.getCreatedBy(),
                 qs.stream().map(q -> new Question(q.getId(), q.getIdx(), q.getText())).toList());
     }
 }

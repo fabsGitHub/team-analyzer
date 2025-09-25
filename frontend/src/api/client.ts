@@ -253,4 +253,9 @@ export const Api = {
   async deleteTeamAdmin(teamId: string): Promise<void> {
     await http.delete(`/admin/teams/${teamId}`)
   },
+
+  async listMySurveys(): Promise<(SurveyDto & { teamName?: string })[]> {
+    const { data } = await http.get('/me/surveys')
+    return data
+  },
 }
