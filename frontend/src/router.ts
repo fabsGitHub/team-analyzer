@@ -43,6 +43,12 @@ const routes = [
     meta: { requiresRole: ['leader'] },
   },
   {
+    path: '/surveys',
+    name: 'SurveyList',
+    component: () => import('@/views/SurveyListView.vue'),
+    meta: { requiresRole: ['leader'] },
+  },
+  {
     path: '/admin/teams',
     name: 'TeamAdmin',
     component: AdminTeamView,

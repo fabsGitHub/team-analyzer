@@ -3,71 +3,43 @@
         <!-- Erstellen -->
         <article class="card stack" style="--space: var(--s-6)">
             <header class="cluster between center">
-                <h1 class="h1">Survey erstellen</h1>
+                <h1 class="h1">{{ t('surveys.create.title') }}</h1>
             </header>
 
             <form class="stack" style="--space: var(--s-4)" @submit.prevent="create">
-                <h2 class="h2">Stammdaten</h2>
+                <h2 class="h2">{{ t('surveys.create.meta') }}</h2>
 
                 <!-- Titel + Team + Anlegen -->
                 <div class="grid">
-                    <input v-model="title" class="input" placeholder="Titel" required aria-label="Titel" />
-                    <select v-model="teamId" class="input select" required aria-label="Team auswählen">
+                    <input v-model="title" class="input" :placeholder="t('surveys.create.fields.title')" required
+                        :aria-label="t('surveys.create.fields.title')" />
+                    <select v-model="teamId" class="input select" required
+                        :aria-label="t('surveys.create.fields.team')">
                         <option v-for="t in myTeams" :key="t.id" :value="t.id">
                             {{ t.name }}
                         </option>
                     </select>
-                    <button class="btn primary" aria-label="Survey anlegen">Anlegen</button>
+                    <button class="btn primary" aria-label="t('surveys.create.fields.submit')">
+                        {{ t('surveys.create.fields.submit') }}
+                    </button>
                 </div>
 
                 <!-- Fragen -->
                 <div class="stack" style="--space: var(--s-3)">
-                    <h2 class="h2">Fragen (5)</h2>
+                    <h2 class="h2">{{ t('surveys.create.questions.title') }}</h2>
                     <div class="stack" style="--space: var(--s-2)">
                         <label v-for="i in 5" :key="i" class="cluster center" style="gap: var(--s-3)">
                             <span class="meta w-0" style="min-width: 3ch;">{{ i }}.</span>
-                            <input v-model="questions[i - 1]" class="input" :placeholder="`Frage ${i}`" required
-                                :aria-label="`Frage ${i}`" />
+                            <input v-model="questions[i - 1]" class="input"
+                                :placeholder="t('surveys.create.questions.placeholder', { i })" required
+                                :aria-label="t('surveys.create.questions.placeholder', { i })" />
                         </label>
                     </div>
                 </div>
             </form>
         </article>
 
-        <!-- Meine Surveys -->
-        <article class="card stack" style="--space: var(--s-4)">
-            <header class="cluster between center">
-                <h2 class="h2">Meine Surveys</h2>
-                <span class="meta">{{ surveys.length }} Einträge</span>
-            </header>
-
-            <div v-if="surveys.length" class="table-wrap">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Titel</th>
-                            <th>Team</th>
-                            <th class="w-0">Aktionen</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="s in surveys" :key="s.id">
-                            <td>{{ s.title }}</td>
-                            <td>{{ s.teamName || '—' }}</td>
-                            <td class="w-0">
-                                <div class="cluster wrap">
-                                    <RouterLink class="btn" :to="`/surveys/${s.id}`">Details</RouterLink>
-                                    <RouterLink class="btn" :to="`/surveys/${s.id}/results`">Ergebnisse</RouterLink>
-                                    <button class="btn" @click="downloadJson(s.id)">JSON export</button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <p v-else class="empty">Noch keine Surveys vorhanden.</p>
-        </article>
+        <SurveyListView />
     </section>
 </template>
 
@@ -75,9 +47,11 @@
 import { onMounted, ref, nextTick } from 'vue'
 import { Api } from '@/api/client'
 import type { TeamLite, SurveyDto } from '@/types'
-import { RouterLink } from 'vue-router'
 import { useStore } from '@/store'
+import { useI18n } from 'vue-i18n'
+import SurveyListView from './SurveyListView.vue'
 
+const { t } = useI18n()
 const state = useStore()
 
 const title = ref('')
@@ -121,24 +95,12 @@ async function create() {
     surveys.value = await Api.listMySurveys()
 }
 
-async function downloadJson(id: string) {
-    const data = await Api.getSurveyResults(id)
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `survey-${id}-results.json`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-}
-
 async function issueTeam() {
     if (!surveyId.value) return
     const { created } = await Api.ensureTokensForTeam(surveyId.value)
-    alert(`${created} neue Tokens für Teammitglieder erstellt.`)
+    alert(t('surveys.create.issuedTeamTokensToast', { n: created }))
 }
+
 </script>
 
 <style scoped>

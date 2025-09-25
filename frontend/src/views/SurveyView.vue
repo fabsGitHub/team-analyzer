@@ -2,71 +2,136 @@
   <section class="admin-page">
     <article class="card stack" style="--space: var(--s-5)">
       <header class="cluster between center">
-        <h1 class="h1">{{ survey?.title ?? 'Survey' }}</h1>
+        <h1 class="h1">
+          {{ survey?.title || t('survey.untitled') }}
+        </h1>
       </header>
 
-      <div v-if="survey" class="stack" style="--space: var(--s-4)">
+      <!-- Fehlerhinweis -->
+      <p v-if="error" class="error">{{ error }}</p>
+
+      <!-- Ladezustand -->
+      <p v-else-if="loading" class="meta">{{ t('survey.fill.loading') }}</p>
+
+      <!-- Inhalt -->
+      <div v-else-if="survey" class="stack" style="--space: var(--s-4)">
         <ol class="q-list stack" style="--space: var(--s-4)">
-          <li v-for="(q, i) in survey.questions" :key="q.id" class="q stack" style="--space: var(--s-2)">
+          <li v-for="(q, i) in (survey.questions ?? [])" :key="q.id ?? i" class="q stack" style="--space: var(--s-2)">
             <div class="cluster center" style="gap: var(--s-3)">
               <span class="meta index">{{ i + 1 }}.</span>
-              <p class="label">{{ q.text }}</p>
+              <p class="label">{{ q?.text || t('survey.noQuestionText') }}</p>
             </div>
             <LikertScale :name="'q' + i" v-model="answers[i]" />
+          </li>
+
+          <li v-if="!(survey.questions?.length)">
+            <span class="meta">{{ t('survey.noQuestions') }}</span>
           </li>
         </ol>
 
         <div class="stack" style="--space: var(--s-2)">
-          <label class="label" for="token">Teilnahmetoken</label>
-          <input id="token" v-model="token" class="input" type="text" placeholder="Token aus dem Einladungslink"
+          <label class="label" for="token">{{ t('survey.fill.token.label') }}</label>
+          <input id="token" v-model="token" class="input" type="text" :placeholder="t('survey.fill.token.placeholder')"
             required />
-          <small class="meta">Der Token ist im Einladungslink enthalten.</small>
+          <small class="meta">{{ t('survey.fill.token.help') }}</small>
         </div>
 
         <div class="cluster between wrap">
-          <span class="meta">{{ answersFilled }}/5 beantwortet</span>
-          <button class="btn primary" type="submit" :disabled="!valid" @click.prevent="submit">
-            Absenden
+          <span class="meta">{{ t('survey.fill.answered', { n: answersFilled }) }}</span>
+          <button class="btn primary" type="submit" :disabled="!valid || submitting" @click.prevent="submit">
+            {{ submitting ? t('common.saving') : t('survey.fill.submit') }}
           </button>
         </div>
       </div>
 
-      <p v-else class="meta">Survey wird geladen…</p>
+      <!-- Fallback falls gar nichts passt -->
+      <p v-else class="meta">{{ t('survey.fill.loading') }}</p>
     </article>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Api } from "@/api/client";
 import type { SurveyDto } from "@/types";
 import LikertScale from "@/components/LikertScale.vue";
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const route = useRoute();
 const router = useRouter();
 
 const survey = ref<SurveyDto | null>(null);
-const answers = ref<number[]>([0, 0, 0, 0, 0]);
+const loading = ref<boolean>(false);
+const error = ref<string | null>(null);
+const submitting = ref<boolean>(false);
+
+// Antworten synchron zur Anzahl der Fragen
+const answers = ref<number[]>([]);
 const token = ref<string>("");
 
-onMounted(async () => {
-  token.value = (route.query.token as string) ?? "";
-  const id = route.params.id as string;
-  survey.value = await Api.getSurvey(id);
-});
+async function load() {
+  loading.value = true;
+  error.value = null;
+  survey.value = null;
+  answers.value = [];
 
-const valid = computed(
-  () => answers.value.every(v => v >= 1 && v <= 5) && token.value.trim().length > 0
+  try {
+    token.value = (route.query.token as string) ?? "";
+    const id = String(route.params.id || "");
+    if (!id) throw new Error("Missing survey id");
+    const s = await Api.getSurvey(id);
+    survey.value = s;
+
+    const qLen = Array.isArray(s.questions) ? s.questions.length : 0;
+    // Initial auf 0 setzen (ungültig), damit valid erst true wird, wenn alles 1..5 ist
+    answers.value = Array.from({ length: qLen }, () => 0);
+  } catch (e: any) {
+    console.error("load survey failed", e);
+    error.value = e?.message || "Failed to load survey";
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(load);
+watch(() => route.fullPath, load);
+
+const answersFilled = computed(
+  () => answers.value.filter(v => v >= 1 && v <= 5).length
 );
 
-const answersFilled = computed(() => answers.value.filter(v => v >= 1 && v <= 5).length);
+// Backend erwartet q1..q5 – wir halten das bei der Validierung ein:
+const requiresCount = 5;
+const valid = computed(() => {
+  const tokOk = token.value.trim().length > 0;
+  // Wenn weniger als 5 Fragen vorhanden sind, validiere, was da ist,
+  // aber blocke submit, wenn weniger als 5 Antworten gebraucht werden.
+  const need = Math.min(answers.value.length, requiresCount);
+  const ok = answers.value.slice(0, need).every(v => v >= 1 && v <= 5);
+  return tokOk && ok && need === requiresCount;
+});
 
 async function submit() {
-  const id = route.params.id as string;
-  const [q1, q2, q3, q4, q5] = answers.value;
-  await Api.submitSurveyResponses(id, { token: token.value.trim(), q1, q2, q3, q4, q5 });
-  router.replace({ name: "MyToken", query: { submitted: "1" } });
+  if (!survey.value) return;
+  if (!valid.value) return;
+
+  submitting.value = true;
+  try {
+    const id = String(route.params.id || "");
+    const [q1, q2, q3, q4, q5] = answers.value;
+    await Api.submitSurveyResponses(id, {
+      token: token.value.trim(),
+      q1, q2, q3, q4, q5
+    });
+    router.replace({ name: "MyToken", query: { submitted: "1" } });
+  } catch (e: any) {
+    console.error("submit failed", e);
+    error.value = e?.message ?? "Submit failed";
+  } finally {
+    submitting.value = false;
+  }
 }
 </script>
 
@@ -94,6 +159,15 @@ async function submit() {
   font-size: .9rem
 }
 
+.error {
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  padding: .5rem .75rem;
+  border-radius: 8px;
+}
+
+/* layout utils */
 .stack>*+* {
   margin-top: var(--space, var(--s-4))
 }

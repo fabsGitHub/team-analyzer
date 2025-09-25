@@ -13,6 +13,16 @@ import axios, {
   type AxiosResponse,
 } from 'axios'
 
+// ==== NEW: eigene Flags an Axios-Config ====
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /** 401 ok, kein Refresh-/Retry-Versuch (z.B. /me auf öffentlicher Seite) */
+    allowAnonymous?: boolean
+    /** Für diesen Request keinen Authorization-Bearer anhängen */
+    skipAuthHeader?: boolean
+  }
+}
+
 const apiBase = (import.meta.env.VITE_API_BASE as string) ?? '/api'
 
 // token wiring (provided by store)
@@ -35,35 +45,47 @@ export const http = axios.create({
 
 // -- helpers
 function setAuthHeader(headers: any, token: string | undefined) {
-  if (!headers) headers = {}
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  } else {
-    delete headers['Authorization']
-  }
-  return headers
+  const h = headers ?? {}
+  if (token) h['Authorization'] = `Bearer ${token}`
+  else delete h['Authorization']
+  return h
 }
 
-// request: attach Authorization
+function isAuthEndpoint(url?: string | null): boolean {
+  const u = (url ?? '').toString()
+  return (
+    u.includes('/auth/login') ||
+    u.includes('/auth/register') ||
+    u.includes('/auth/refresh') ||
+    u.includes('/auth/logout')
+  )
+}
+
+// request: attach Authorization (außer bei Auth-Endpunkten)
 http.interceptors.request.use((config) => {
-  const token = getToken()
-  config.headers = setAuthHeader(config.headers, token)
+  // sehr wichtig: beim Refresh/Login/… KEINE alte Authorization anhängen
+  if (isAuthEndpoint(config.url)) return config
+  if (!config.skipAuthHeader) {
+    const token = getToken()
+    config.headers = setAuthHeader(config.headers, token)
+  }
   return config
 })
 
-// refresh pipeline
+// refresh pipeline (single-flight)
 let isRefreshing = false
 type Waiter = { onToken: (tok: string) => void; onError: (err: any) => void }
 let pending: Waiter[] = []
 
 async function refreshAccessToken(): Promise<string> {
-  // Wichtig: diese Anfrage läuft cookie-basiert (refresh_token-Cookie)
+  // läuft cookie-basiert; KEINE Authorization anhängen (s. Request-Interceptor)
   const { data } = await http.post<{ accessToken: string }>(
     '/auth/refresh',
     null,
     {
-      // beim Refresh KEIN alter Bearer erzwingen
       headers: { 'Content-Type': 'application/json' },
+      // optional defensiv:
+      skipAuthHeader: true, // NEW: stellt sicher, dass nie ein Bearer dran hängt
     },
   )
   // persist + default header aktualisieren
@@ -75,7 +97,7 @@ async function refreshAccessToken(): Promise<string> {
   return data.accessToken
 }
 
-// response: on 401 -> refresh once and retry
+// response: on 401/419 -> refresh once and retry
 http.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
@@ -83,44 +105,40 @@ http.interceptors.response.use(
     const original = error.config as
       | (AxiosRequestConfig & { _retry?: boolean })
       | undefined
+    if (!original || !resp) return Promise.reject(error)
 
-    // Kein config/Response? -> weiterwerfen
-    if (!original || !resp) {
-      return Promise.reject(error)
-    }
-
-    // Auth-Endpoints selbst nie refreshen
     const url = (original.url ?? '').toString()
-    const isAuthEndpoint =
-      url.includes('/auth/login') ||
-      url.includes('/auth/register') ||
-      url.includes('/auth/refresh') ||
-      url.includes('/auth/logout')
+    const authCall = isAuthEndpoint(url)
 
     // 403: Admin access denied redirect
     if (resp.status === 403) {
-      const path = (original?.url ?? '').toString()
-      // alles unter /admin/ führt bei 403 auf /my/tokens
-      if (path.startsWith('/admin/')) {
-        window.location.replace('/my/tokens?denied=admin')
+      if (url.startsWith('/admin/')) {
+        try {
+          window.location.replace('/my/tokens?denied=admin')
+        } catch {}
       }
       return Promise.reject(error)
     }
 
-    // Nur bei 401, nicht bei bereits geretryten Requests
-    if (resp.status !== 401 || isAuthEndpoint || original._retry) {
+    const isUnauth = resp.status === 401 || resp.status === 419
+
+    // ==== NEW: 401 für anonyme Calls einfach durchreichen, kein Refresh
+    if (isUnauth && original.allowAnonymous) {
       return Promise.reject(error)
     }
 
-    // Markiere als Retry
+    // Nicht bei Auth-Endpunkten oder bereits geretryten Requests refreshen
+    if (!isUnauth || authCall || original._retry) {
+      return Promise.reject(error)
+    }
+
     original._retry = true
 
-    // Refresh orchestrieren (nur einmal parallel)
+    // orchestrierter Single-Flight-Refresh
     if (!isRefreshing) {
       isRefreshing = true
       try {
         const newTok = await refreshAccessToken()
-        // ausstehende waiters informieren
         pending.forEach((w) => w.onToken(newTok))
         pending = []
       } catch (e) {
@@ -128,7 +146,6 @@ http.interceptors.response.use(
         pending = []
         setToken('')
         delete (http.defaults.headers as any).common?.Authorization
-        isRefreshing = false
         throw e
       } finally {
         isRefreshing = false
@@ -139,7 +156,6 @@ http.interceptors.response.use(
     return new Promise<AxiosResponse>((resolve, reject) => {
       pending.push({
         onToken: (tok) => {
-          // Header des ursprünglichen Requests mit neuem Token bestücken
           original.headers = setAuthHeader(original.headers, tok)
           http.request(original).then(resolve).catch(reject)
         },
@@ -153,16 +169,21 @@ http.interceptors.response.use(
 export const Api = {
   // Auth
   async register(email: string, password: string): Promise<void> {
-    await http.post('/auth/register', { email, password })
+    await http.post(
+      '/auth/register',
+      { email, password },
+      { skipAuthHeader: true },
+    ) // NEW: sicherheitshalber
   },
   async login(
     email: string,
     password: string,
   ): Promise<{ accessToken: string }> {
-    const { data } = await http.post<{ accessToken: string }>('/auth/login', {
-      email,
-      password,
-    })
+    const { data } = await http.post<{ accessToken: string }>(
+      '/auth/login',
+      { email, password },
+      { skipAuthHeader: true }, // NEW
+    )
     setToken(data.accessToken)
     http.defaults.headers.common = setAuthHeader(
       http.defaults.headers.common,
@@ -172,7 +193,7 @@ export const Api = {
   },
   async logout(): Promise<void> {
     try {
-      await http.post('/auth/logout')
+      await http.post('/auth/logout', null, { skipAuthHeader: true }) // NEW
     } finally {
       setToken('')
       delete (http.defaults.headers as any).common?.Authorization
@@ -184,49 +205,49 @@ export const Api = {
     id: string
     isLeader: boolean
   }> {
+    // Tipp: für öffentliche Seiten ggf. { allowAnonymous: true } setzen
     const { data } = await http.get('/me')
     return data
   },
+  async meAnonymousOk(): Promise<void> {
+    // optionales Helferlein für Navbar auf öffentlichen Seiten
+    await http.get('/me', { allowAnonymous: true })
+  },
   async resetPassword(email: string): Promise<void> {
-    await http.post('/auth/reset', { email })
+    await http.post('/auth/reset', { email }, { skipAuthHeader: true }) // NEW
   },
 
-  // --- Surveys (öffentlich/leader/admin kombi) ---
+  // --- Surveys ---
   async getSurvey(id: string): Promise<SurveyDto> {
     const { data } = await http.get<SurveyDto>(`/surveys/${id}`)
     return data
   },
-
   async submitSurveyResponses(
     id: string,
     body: SubmitSurveyRequest,
   ): Promise<void> {
     await http.post(`/surveys/${id}/responses`, body)
   },
-
   async getSurveyResults(id: string): Promise<SurveyResultsDto> {
     const { data } = await http.get<SurveyResultsDto>(`/surveys/${id}/results`)
     return data
   },
-
   async createSurvey(payload: CreateSurveyRequest): Promise<SurveyDto> {
     const { data } = await http.post<SurveyDto>('/surveys', payload)
     return data
   },
-
   async issueSurveyTokens(id: string, count: number): Promise<string[]> {
     const { data } = await http.post<string[]>(`/surveys/${id}/tokens/batch`, {
       count,
     })
     return data
   },
-
   buildSurveyInviteLink(surveyId: string, token: string): string {
     const base = window.location.origin
     return `${base}/surveys/${surveyId}?token=${encodeURIComponent(token)}`
   },
 
-  // --- Leader: eigene Teams (für DropDown) ---
+  // --- Leader ---
   async myTeams(leaderOnly = true): Promise<TeamLite[]> {
     const { data } = await http.get<TeamLite[]>('/me/teams', {
       params: { leaderOnly },
@@ -239,11 +260,9 @@ export const Api = {
     const { data } = await http.get<TeamAdminDto[]>('/admin/teams')
     return data
   },
-
   async createTeamAdmin(name: string, leaderUserId: string): Promise<void> {
     await http.post('/admin/teams', null, { params: { name, leaderUserId } })
   },
-
   async addMemberAdmin(
     teamId: string,
     userId: string,
@@ -253,7 +272,6 @@ export const Api = {
       params: { userId, leader },
     })
   },
-
   async setLeaderAdmin(
     teamId: string,
     userId: string,
@@ -263,11 +281,9 @@ export const Api = {
       params: { userId, leader },
     })
   },
-
   async removeMemberAdmin(teamId: string, userId: string): Promise<void> {
     await http.delete(`/admin/teams/${teamId}/members/${userId}`)
   },
-
   async deleteTeamAdmin(teamId: string): Promise<void> {
     await http.delete(`/admin/teams/${teamId}`)
   },
@@ -276,28 +292,24 @@ export const Api = {
     const { data } = await http.get('/me/surveys')
     return data
   },
-
   async ensureTokensForTeam(surveyId: string): Promise<{ created: number }> {
     const { data } = await http.post<{ created: number }>(
       `/surveys/${surveyId}/tokens/for-members`,
     )
     return data
   },
-
   async myTokenForSurvey(
     surveyId: string,
   ): Promise<{ created: boolean; inviteLink?: string }> {
     const { data } = await http.get(`/surveys/${surveyId}/my-token`)
     return data
   },
-
   async renewMyToken(
     surveyId: string,
   ): Promise<{ created: boolean; inviteLink: string }> {
     const { data } = await http.post(`/surveys/${surveyId}/my-token/renew`)
     return data
   },
-
   async listMyOpenTokens(): Promise<MyOpenToken[]> {
     const { data } = await http.get<MyOpenToken[]>('/my/tokens')
     return data

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Api } from '@/api/client'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 type MyOpenToken = Awaited<ReturnType<typeof Api.listMyOpenTokens>>[number]
 
 const tokens = ref<MyOpenToken[]>([])
@@ -51,22 +53,22 @@ onMounted(load)
 
 <template>
     <section class="card">
-        <h1>Meine offenen Tokens</h1>
+        <h1>{{ t('tokens.title') }}</h1>
 
-        <div v-if="loading" class="muted">Lade…</div>
+        <div v-if="loading" class="muted">{{ t('tokens.loading') }}</div>
         <div v-else-if="error" class="error">{{ error }}</div>
         <div v-else>
-            <div v-if="tokens.length === 0" class="muted">Keine offenen Tokens.</div>
+            <div v-if="tokens.length === 0" class="muted">{{ t('tokens.none') }}</div>
             <ul class="list">
-                <li v-for="t in tokens" :key="t.tokenId" class="row">
+                <li v-for="token in tokens" :key="token.tokenId" class="row">
                     <div>
-                        <strong>{{ t.surveyTitle }}</strong>
-                        <div class="muted">ausgestellt: {{ new Date(t.issuedAt).toLocaleString() }}</div>
-                        <!-- WICHTIG: Kein Token anzeigen! (tokenId ist NICHT das Plain-Token) -->
+                        <strong>{{ token.surveyTitle }}</strong>
+                        <div class="muted">{{ t('tokens.issuedAt') }} {{ new Date(token.issuedAt).toLocaleString() }}
+                        </div>
                     </div>
                     <div class="actions">
-                        <button class="btn" @click="goToSurvey(t)" :disabled="busyId === t.surveyId">
-                            Zur Umfrage
+                        <button class="btn" @click="goToSurvey(token)" :disabled="busyId === token.surveyId">
+                            {{ t('tokens.openSurvey') }}
                         </button>
                     </div>
                 </li>

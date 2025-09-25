@@ -2,27 +2,27 @@
     <section class="card">
         <header class="header">
             <div>
-                <h1 class="title">{{ title || 'Survey-Ergebnisse' }}</h1>
+                <h1 class="title">{{ title || t('results.title') }}</h1>
                 <p v-if="subtitle" class="subtitle">{{ subtitle }}</p>
                 <p v-if="metaLine" class="meta">{{ metaLine }}</p>
             </div>
-
             <div class="actions">
-                <RouterLink class="btn" to="/leader/surveys">← Zur Übersicht</RouterLink>
-                <a class="btn" :href="`${apiBase}/surveys/${surveyId}/results`" target="_blank" rel="noopener">JSON</a>
-                <button class="btn" @click="downloadCsv" :disabled="norm.length === 0">CSV</button>
-                <button class="btn" @click="reload" :disabled="loading">Neu laden</button>
+                <RouterLink class="btn" to="/leader/surveys">{{ t('results.back') }}</RouterLink>
+                <a class="btn" :href="`${apiBase}/surveys/${surveyId}/results`" target="_blank" rel="noopener">
+                    {{ t('results.json') }}
+                </a>
+                <button class="btn" @click="downloadCsv" :disabled="norm.length === 0">{{ t('results.csv') }}</button>
+                <button class="btn" @click="reload" :disabled="loading">{{ t('results.reload') }}</button>
             </div>
         </header>
 
-        <div v-if="loading" class="loading">Ergebnisse werden geladen…</div>
+        <div v-if="loading" class="loading">{{ t('results.loading') }}</div>
         <div v-else-if="error" class="error">
-            <strong>Fehler:</strong> {{ error }}
-            <div v-if="errorStatus === 401" class="hint">Bitte melde dich erneut an.</div>
+            <strong>{{ t('results.errorTitle') }}</strong> {{ error }}
+            <div v-if="errorStatus === 401" class="hint">{{ t('results.reauthHint') }}</div>
         </div>
         <div v-else>
-            <div v-if="norm.length === 0" class="empty">Noch keine Antworten vorhanden.</div>
-
+            <div v-if="norm.length === 0" class="empty">{{ t('results.empty') }}</div>
             <ul class="q-list">
                 <li v-for="(q, idx) in norm" :key="idx" class="q-item">
                     <div class="q-head">
@@ -32,25 +32,23 @@
                             <span class="muted">n={{ q.total }}</span>
                         </div>
                     </div>
-
                     <!-- Stacked distribution (1..5) -->
                     <div class="bar" :class="{ empty: q.total === 0 }">
                         <div v-for="(c, i) in q.counts" :key="i" v-show="c > 0" class="seg"
-                            :title="`${i + 1} Sterne: ${c}`"
+                            :title="t('results.starsTooltip', { n: i + 1, count: c })"
                             :style="{ flexGrow: c, background: 'var(--accent, #b66a2b)' }">
                             <span>{{ Math.round((c / q.total) * 100) }}%</span>
                         </div>
                     </div>
-
                     <!-- Tabular breakdown -->
-                    <div class="table">
+                    <div class="gridtable">
                         <div class="row header">
-                            <div class="cell">Wert</div>
+                            <div class="cell">{{ t('results.value') }}</div>
                             <div class="cell" v-for="n in 5" :key="n">{{ n }}</div>
-                            <div class="cell right">Summe</div>
+                            <div class="cell right">{{ t('results.total') }}</div>
                         </div>
                         <div class="row">
-                            <div class="cell">Anzahl</div>
+                            <div class="cell">{{ t('results.count') }}</div>
                             <div class="cell" v-for="(c, i) in q.counts" :key="i">{{ c }}</div>
                             <div class="cell right">{{ q.total }}</div>
                         </div>
@@ -66,7 +64,9 @@ import { onMounted, ref, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { Api } from '@/api/client'
 import type { SurveyDto, SurveyResultsDto, SingleSurveyResultDto } from '@/types'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 // --- state ---
 const route = useRoute()
 const surveyId = route.params.id as string
@@ -108,9 +108,10 @@ const subtitle = computed(() => {
     return ''
 })
 const metaLine = computed(() => {
-    const n = results.value?.n
-    return typeof n === 'number' ? `Teilnahmen: ${n}` : ''
+  const n = results.value?.n
+  return typeof n === 'number' ? t('results.participants', { n }) : ''
 })
+
 
 // --- normalize results to a uniform shape the UI understands ---
 type QNorm = { label: string; counts: number[]; average: number; total: number }
@@ -320,7 +321,7 @@ function downloadCsv() {
     mix-blend-mode: multiply;
 }
 
-.table {
+.gridtable {
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;

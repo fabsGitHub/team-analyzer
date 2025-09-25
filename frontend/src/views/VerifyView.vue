@@ -1,7 +1,21 @@
+<template>
+    <section class="admin-page">
+        <article class="card stack" style="--space: var(--s-3)">
+            <h1 class="h1">{{ t('verify.title') }}</h1>
+            <p v-if="status === 'idle'" class="meta">{{ t('verify.status.idle') }}</p>
+            <p v-else-if="status === 'missing'" class="meta">{{ t('verify.status.missing') }}</p>
+            <p v-else-if="status === 'error'" class="meta">{{ t('verify.status.error') }}</p>
+            <p v-else class="meta">{{ t('verify.status.ok') }}</p>
+        </article>
+    </section>
+</template>
+
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const status = ref<'idle' | 'ok' | 'missing' | 'error'>('idle')
@@ -22,18 +36,6 @@ onMounted(async () => {
     } catch { status.value = 'error' }
 })
 </script>
-
-<template>
-    <section class="admin-page">
-        <article class="card stack" style="--space: var(--s-3)">
-            <h1 class="h1">E-Mail bestätigen</h1>
-            <p v-if="status === 'idle'" class="meta">Bestätige…</p>
-            <p v-else-if="status === 'missing'" class="meta">Kein Token in der URL gefunden.</p>
-            <p v-else-if="status === 'error'" class="meta">Bestätigung fehlgeschlagen. Bitte Link erneut öffnen.</p>
-            <p v-else class="meta">Bestätigt — weiterleiten…</p>
-        </article>
-    </section>
-</template>
 
 <style scoped>
 :root,

@@ -2,18 +2,20 @@
   <section class="admin-page">
     <div class="card stack" style="--space: var(--s-6)">
       <header class="cluster between center">
-        <h1 class="h1">Teamverwaltung</h1>
+        <h1 class="h1">{{ t('admin.teams.title') }}</h1>
       </header>
 
       <!-- Neues Team anlegen -->
       <form class="stack" style="--space: var(--s-3)" @submit.prevent="createTeam">
-        <h2 class="h2">Neues Team erstellen</h2>
-
+        <h2 class="h2">{{ t('admin.teams.newTitle') }}</h2>
         <div class="grid cols-3">
-          <input v-model="newTeamName" class="input" placeholder="Team-Name" required aria-label="Team-Name" />
-          <input v-model="newLeaderId" class="input" placeholder="Leader-UserId (UUID)" required
-            aria-label="Leader-UserId" />
-          <button class="btn primary" aria-label="Team anlegen">Anlegen</button>
+          <input v-model="newTeamName" class="input" :placeholder="t('admin.teams.namePlaceholder')" required
+            :aria-label="t('admin.teams.namePlaceholder')" />
+          <input v-model="newLeaderId" class="input" :placeholder="t('admin.teams.leaderIdPlaceholder')" required
+            :aria-label="t('admin.teams.leaderIdPlaceholder')" />
+          <button class="btn primary" :aria-label="t('admin.teams.createBtn')">
+            {{ t('admin.teams.createBtn') }}
+          </button>
         </div>
       </form>
     </div>
@@ -24,38 +26,42 @@
         <header class="cluster between center">
           <div class="cluster center" style="gap: var(--s-3)">
             <h2 class="h2">{{ team.name }}</h2>
-            <span class="meta">Mitglieder: {{ team.members.length }}</span>
-            <span class="meta">Leader: {{ leaderCount(team) }}</span>
+            <span class="meta">{{ t('admin.teams.membersCount', { n: team.members.length }) }}</span>
+            <span class="meta">{{ t('admin.teams.leadersCount', { n: leaderCount(team) }) }}</span>
           </div>
-          <button class="btn danger ghost" @click="removeTeam(team.id)">Team löschen</button>
+          <button class="btn danger ghost" @click="openDeleteDialog(team.id)">
+            {{ t('admin.teams.deleteTeam') }}
+          </button>
         </header>
 
         <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
-                <th>User ID</th>
-                <th class="w-0">Leader</th>
-                <th class="w-0">Aktionen</th>
+                <th>{{ t('admin.teams.userId') }}</th>
+                <th class="w-0">{{ t('admin.teams.leader') }}</th>
+                <th class="w-0">{{ t('admin.teams.actions') }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="m in team.members" :key="m.userId">
                 <td><code class="mono">{{ m.userId }}</code></td>
                 <td class="w-0">
-                  <span v-if="m.leader" class="badge">Leader</span>
+                  <span v-if="m.leader" class="badge">{{ t('admin.teams.leader') }}</span>
                 </td>
                 <td class="w-0">
                   <div class="cluster between wrap">
                     <button class="btn" @click="toggleLeader(team.id, m.userId, !m.leader)">
-                      {{ m.leader ? 'Leader entziehen' : 'Leader machen' }}
+                      {{ m.leader ? t('admin.teams.removeLeader') : t('admin.teams.makeLeader') }}
                     </button>
-                    <button class="btn danger" @click="removeMember(team.id, m.userId)">Entfernen</button>
+                    <button class="btn danger" @click="openRemoveMemberDialog(team.id, m.userId)">
+                      {{ t('admin.teams.removeMember') }}
+                    </button>
                   </div>
                 </td>
               </tr>
               <tr v-if="!team.members.length">
-                <td colspan="3" class="empty">Noch keine Mitglieder</td>
+                <td colspan="3" class="empty">{{ t('admin.teams.noneTeams') }}</td>
               </tr>
             </tbody>
           </table>
@@ -63,35 +69,107 @@
 
         <!-- Mitglied hinzufügen (pro Team eigener Eingabestatus) -->
         <form class="grid" @submit.prevent="addMember(team.id)">
-          <input v-model="memberInputs[team.id].userId" class="input" :placeholder="`UserId (UUID)`" required
-            :aria-label="`UserId für ${team.name}`" />
+          <input v-model="memberInputs[team.id].userId" class="input"
+            :placeholder="t('admin.teams.addMember.userIdPlaceholder')" required
+            :aria-label="t('admin.teams.addMember.userIdPlaceholder')" />
           <label class="cluster center" style="gap: var(--s-2)">
             <input type="checkbox" v-model="memberInputs[team.id].leader" />
-            Leader?
+            {{ t('admin.teams.addMember.isLeader') }}
           </label>
-          <button class="btn">Hinzufügen</button>
+          <button class="btn">{{ t('admin.teams.addMember.addBtn') }}</button>
         </form>
       </article>
     </div>
 
     <div v-else class="card empty-state">
-      Noch keine Teams angelegt. Lege oben ein Team an.
+      {{ t('admin.teams.noneMembers') }}
     </div>
+
+    <!-- Dialog für Team-Löschen -->
+    <DialogModal :open="deleteDialog.open" :danger="true" :cancelText="t('form.cancel')"
+      :confirmText="t('admin.teams.deleteTeam')" @close="deleteDialog.open = false" @confirm="confirmDeleteTeam">
+      <template #title>{{ t('admin.teams.deleteTeam') }}</template>
+      <div>
+        {{ deleteDialog.teamName
+          ? t('admin.teams.confirmDeleteTeamWithName', { team: deleteDialog.teamName })
+          : t('admin.teams.confirmDelete') }}
+      </div>
+    </DialogModal>
+
+    <!-- Dialog für Mitglied entfernen -->
+    <DialogModal :open="removeMemberDialog.open" :danger="true" :cancelText="t('form.cancel')"
+      :confirmText="t('admin.teams.removeMember')" @close="removeMemberDialog.open = false"
+      @confirm="confirmRemoveMember">
+      <template #title>{{ t('admin.teams.removeMemberTitle') }}</template>
+      <div>
+        {{ t('admin.teams.confirmRemoveMember', {
+          userId: removeMemberDialog.userId ?? '',
+          team: removeMemberDialog.teamName ?? ''
+        }) }}
+      </div>
+    </DialogModal>
+
   </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Api } from '@/api/client'
 import type { TeamAdminDto } from '@/types'
+import DialogModal from '@/components/DialogModal.vue'
 
+const { t } = useI18n()
 const teams = ref<TeamAdminDto[]>([])
-
 const newTeamName = ref('')
 const newLeaderId = ref('')
-
-// pro Team eigene Eingaben: { [teamId]: { userId, leader } }
 const memberInputs = reactive<Record<string, { userId: string; leader: boolean }>>({})
+
+// Dialog-Status
+const deleteDialog = reactive<{ open: boolean; teamId: string | null; teamName: string | null }>({
+  open: false, teamId: null, teamName: null
+})
+
+function openDeleteDialog(teamId: string) {
+  const team = teams.value.find(t => t.id === teamId) || null
+  deleteDialog.teamId = teamId
+  deleteDialog.teamName = team?.name ?? null
+  deleteDialog.open = true
+}
+
+
+async function confirmDeleteTeam() {
+  if (deleteDialog.teamId) {
+    await Api.deleteTeamAdmin(deleteDialog.teamId)
+    await loadTeams()
+  }
+  deleteDialog.open = false
+  deleteDialog.teamId = null
+}
+
+const removeMemberDialog = reactive<{ open: boolean; teamId: string | null; userId: string | null; teamName: string | null }>({
+  open: false, teamId: null, userId: null, teamName: null
+})
+
+function openRemoveMemberDialog(teamId: string, userId: string) {
+  const team = teams.value.find(t => t.id === teamId) || null
+  removeMemberDialog.teamId = teamId
+  removeMemberDialog.userId = userId
+  removeMemberDialog.teamName = team?.name ?? null
+  removeMemberDialog.open = true
+}
+
+async function confirmRemoveMember() {
+  if (removeMemberDialog.teamId && removeMemberDialog.userId) {
+    await Api.removeMemberAdmin(removeMemberDialog.teamId, removeMemberDialog.userId)
+    await loadTeams()
+  }
+  removeMemberDialog.open = false
+  removeMemberDialog.teamId = null
+  removeMemberDialog.userId = null
+  removeMemberDialog.teamName = null
+}
+
 
 function ensureMemberInput(teamId: string) {
   if (!memberInputs[teamId]) memberInputs[teamId] = { userId: '', leader: false }
@@ -104,7 +182,6 @@ function leaderCount(team: TeamAdminDto) {
 
 async function loadTeams() {
   teams.value = await Api.listTeamsAdmin()
-  // Eingabestatus sicherstellen
   teams.value.forEach((t) => ensureMemberInput(t.id))
 }
 
@@ -126,18 +203,6 @@ async function addMember(teamId: string) {
 async function toggleLeader(teamId: string, userId: string, leader: boolean) {
   await Api.setLeaderAdmin(teamId, userId, leader)
   await loadTeams()
-}
-
-async function removeMember(teamId: string, userId: string) {
-  await Api.removeMemberAdmin(teamId, userId)
-  await loadTeams()
-}
-
-async function removeTeam(teamId: string) {
-  if (confirm('Soll das Team wirklich gelöscht werden? Alle Mitglieder werden entfernt!')) {
-    await Api.deleteTeamAdmin(teamId)
-    await loadTeams()
-  }
 }
 
 onMounted(loadTeams)

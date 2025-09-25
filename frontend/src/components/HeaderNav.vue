@@ -2,8 +2,8 @@
 <template>
     <header class="nav" role="banner" v-if="state.state.user">
         <div class="navwrap">
-            <div class="brand" aria-label="App" @click="router.push('/analysis')" style="cursor:pointer" tabindex="0"
-                @keydown.enter="router.push('/analysis')">x
+            <div class="brand" aria-label="App" @click="router.push('/my/tokens')" style="cursor:pointer" tabindex="0"
+                @keydown.enter="router.push('/my/tokens')">x
                 {{ t('app') }}
             </div>
 
@@ -15,6 +15,10 @@
                 <RouterLink v-if="state.state.user?.roles.includes(Roles.LEADER)" class="tab"
                     :aria-current="route.path === '/leader/surveys' ? 'page' : undefined" to="/leader/surveys">
                     {{ t('nav.createSurvey') }}
+                </RouterLink>
+                <RouterLink v-if="state.state.user?.roles.includes(Roles.LEADER)" class="tab"
+                    :aria-current="route.path === '/surveys' ? 'page' : undefined" to="/surveys">
+                    {{ t('nav.mySurveys') }}
                 </RouterLink>
                 <RouterLink class="tab" :aria-current="route.path === '/my/tokens' ? 'page' : undefined"
                     to="/my/tokens">
