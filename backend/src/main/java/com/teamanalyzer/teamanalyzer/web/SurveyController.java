@@ -15,11 +15,13 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teamanalyzer.teamanalyzer.domain.Survey;
 import com.teamanalyzer.teamanalyzer.domain.SurveyToken;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
+import com.teamanalyzer.teamanalyzer.service.DownloadTokenService;
 import com.teamanalyzer.teamanalyzer.service.SurveyService;
 import com.teamanalyzer.teamanalyzer.service.TokenService;
 import com.teamanalyzer.teamanalyzer.web.dto.CreateSurveyRequest;
@@ -42,6 +44,8 @@ public class SurveyController {
   private final TokenService tokenService;
   private final TeamMemberRepository tmRepo;
   private final SurveyRepository surveyRepo;
+  private final DownloadTokenService downloadTokens; // ← NEU
+  private final ObjectMapper objectMapper;
 
   @PersistenceContext
   private EntityManager em;
@@ -166,20 +170,61 @@ public class SurveyController {
     return new MyTokenDto(true, inviteLink);
   }
 
-  // --- Helper: bevorzugt app.frontend-base-url; sonst Fallback auf Request ---
+  @GetMapping("/{id}/results/download-link")
+  public Map<String, String> makeDownloadLink(@AuthenticationPrincipal AuthUser me, @PathVariable UUID id,
+      HttpServletRequest req) {
+    if (me == null || me.userId() == null)
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+    boolean isAdmin = hasRole("ROLE_ADMIN");
+    boolean isLeaderOfTeam = surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, me.userId());
+    if (!(isAdmin || isLeaderOfTeam))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+
+    String dl = downloadTokens.issue(id, me.userId(), java.time.Duration.ofMinutes(5));
+    String base = (frontendBaseUrl != null && !frontendBaseUrl.isBlank())
+        ? frontendBaseUrl.replaceAll("/+$", "")
+        : buildBaseFromRequest(req);
+    String url = base + "/api/surveys/" + id + "/results/download?dl=" + dl;
+    return Map.of("url", url);
+  }
+
+  @GetMapping("/{id}/results/download")
+  public ResponseEntity<byte[]> downloadViaToken(@PathVariable UUID id, @RequestParam("dl") String dl)
+      throws Exception {
+    UUID userId = downloadTokens.verifyAndExtractUser(dl, id);
+    // optional: zusätzliche Berechtigung prüfen (z.B. member/leader/admin):
+    boolean allowed = hasRole("ROLE_ADMIN") ||
+        surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, userId) ||
+        tmRepo.existsByTeam_IdAndUser_Id(
+            surveyRepo.findTeamIdById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)),
+            userId);
+    if (!allowed)
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+
+    SurveyResultsDto dto = surveyService.getResults(userId, id);
+    byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(dto);
+    return ResponseEntity.ok()
+        .header("Content-Disposition", "attachment; filename=\"survey-" + id + "-results.json\"")
+        .header("Cache-Control", "no-store")
+        .header("Pragma", "no-cache")
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(json);
+  }
+
+  private String buildBaseFromRequest(HttpServletRequest req) {
+    String scheme = req.getScheme();
+    String host = req.getServerName();
+    int port = req.getServerPort();
+    boolean isDefault = ("http".equalsIgnoreCase(scheme) && port == 80) ||
+        ("https".equalsIgnoreCase(scheme) && port == 443);
+    return scheme + "://" + host + (isDefault ? "" : (":" + port));
+  }
+
+  // WICHTIG: Invite-Link soll die SPA öffnen (ohne /api)
   private String buildInviteLink(HttpServletRequest req, UUID surveyId, String plain) {
-    String base;
-    if (frontendBaseUrl != null && !frontendBaseUrl.isBlank()) {
-      base = frontendBaseUrl.replaceAll("/+$", ""); // trailing Slash entfernen
-    } else {
-      // Fallback (sollte dank Property selten nötig sein)
-      String scheme = req.getScheme();
-      String host = req.getServerName();
-      int port = req.getServerPort();
-      boolean isDefault = ("http".equalsIgnoreCase(scheme) && port == 80) ||
-          ("https".equalsIgnoreCase(scheme) && port == 443);
-      base = scheme + "://" + host + (isDefault ? "" : (":" + port));
-    }
+    String base = (frontendBaseUrl != null && !frontendBaseUrl.isBlank())
+        ? frontendBaseUrl.replaceAll("/+$", "")
+        : buildBaseFromRequest(req);
     return base + "/surveys/" + surveyId + "?token=" + URLEncoder.encode(plain, StandardCharsets.UTF_8);
   }
 }

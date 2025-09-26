@@ -7,10 +7,10 @@
                 <p v-if="metaLine" class="meta">{{ metaLine }}</p>
             </div>
             <div class="actions">
-                <RouterLink class="btn" to="/leader/surveys">{{ t('results.back') }}</RouterLink>
-                <a class="btn" :href="`${apiBase}/surveys/${surveyId}/results`" target="_blank" rel="noopener">
+                <RouterLink class="btn" to="/surveys">{{ t('results.back') }}</RouterLink>
+                <button class="btn" @click="downloadJson">
                     {{ t('results.json') }}
-                </a>
+                </button>
                 <button class="btn" @click="downloadCsv" :disabled="norm.length === 0">{{ t('results.csv') }}</button>
                 <button class="btn" @click="reload" :disabled="loading">{{ t('results.reload') }}</button>
             </div>
@@ -67,8 +67,9 @@ import type { SurveyDto, SurveyResultsDto, SingleSurveyResultDto } from '@/types
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-// --- state ---
 const route = useRoute()
+
+// surveyId ist ein einfacher String (kein Ref)
 const surveyId = route.params.id as string
 
 const survey = ref<SurveyDto | null>(null)
@@ -76,8 +77,6 @@ const results = ref<SurveyResultsDto | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const errorStatus = ref<number | null>(null)
-
-const apiBase = (import.meta.env.VITE_API_BASE as string) ?? '/api'
 
 // --- load ---
 async function load() {
@@ -101,22 +100,16 @@ async function load() {
 onMounted(load)
 const reload = () => load()
 
-// --- derive meta ---
+// --- meta ---
 const title = computed(() => survey.value?.title || '')
-const subtitle = computed(() => {
-    // Falls du Teamnamen im SurveyDto hast, hier einsetzen
-    return ''
-})
+const subtitle = computed(() => '')
 const metaLine = computed(() => {
-  const n = results.value?.n
-  return typeof n === 'number' ? t('results.participants', { n }) : ''
+    const n = results.value?.n
+    return typeof n === 'number' ? t('results.participants', { n }) : ''
 })
 
-
-// --- normalize results to a uniform shape the UI understands ---
+// --- normalize ---
 type QNorm = { label: string; counts: number[]; average: number; total: number }
-
-// Helper: counts für q1..q5 berechnen
 function countsForQuestion(items: SingleSurveyResultDto[], qIndex1: number): number[] {
     const counts = [0, 0, 0, 0, 0]
     const key = `q${qIndex1}` as keyof SingleSurveyResultDto
@@ -126,30 +119,17 @@ function countsForQuestion(items: SingleSurveyResultDto[], qIndex1: number): num
     }
     return counts
 }
-
 const norm = computed<QNorm[]>(() => {
     if (!results.value || !survey.value) return []
-
-    const labels =
-        survey.value.questions?.map((q) => q.text) ??
+    const labels = survey.value.questions?.map((q) => q.text) ??
         Array.from({ length: 5 }, (_, i) => `Frage ${i + 1}`)
-
     const items = results.value.items ?? []
     const n = results.value.n ?? items.length
-
-    // averages kommen direkt aus a1..a5, fallback aus items
-    const avgs = [
-        results.value.a1,
-        results.value.a2,
-        results.value.a3,
-        results.value.a4,
-        results.value.a5,
-    ]
-
+    const avgs = [results.value.a1, results.value.a2, results.value.a3, results.value.a4, results.value.a5]
     return labels.slice(0, 5).map((label, idx) => {
         const qi = idx + 1
         const counts = countsForQuestion(items, qi)
-        const total = n // alle Fragen wurden pro Antwort beantwortet (Likert 1..5)
+        const total = n
         let average = avgs[idx]
         if (typeof average !== 'number' || Number.isNaN(average)) {
             const sum = counts.reduce((acc, c, i) => acc + c * (i + 1), 0)
@@ -159,13 +139,24 @@ const norm = computed<QNorm[]>(() => {
     })
 })
 
+// --- JSON-Download über signierten Link ---
+async function downloadJson() {
+    if (!surveyId) return
+    try {
+        const url = await Api.getResultsDownloadLink(surveyId)
+        window.location.href = url
+    } catch (e: any) {
+        error.value = e?.response?.data?.message || e?.message || 'Download failed'
+        errorStatus.value = e?.response?.status ?? null
+    }
+}
+
 // --- CSV export ---
 function downloadCsv() {
     const lines = [
         'Question,Average,Total,Count_1,Count_2,Count_3,Count_4,Count_5',
         ...norm.value.map(
-            (q) =>
-                `"${q.label.replace(/"/g, '""')}",${q.average.toFixed(3)},${q.total},${q.counts.join(',')}`,
+            (q) => `"${q.label.replace(/"/g, '""')}",${q.average.toFixed(3)},${q.total},${q.counts.join(',')}`,
         ),
     ]
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })

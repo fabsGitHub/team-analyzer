@@ -19,7 +19,7 @@
                             {{ t.name }}
                         </option>
                     </select>
-                    <button class="btn primary" aria-label="t('surveys.create.fields.submit')">
+                    <button class="btn primary" type="submit" :aria-label="t('surveys.create.fields.submit')">
                         {{ t('surveys.create.fields.submit') }}
                     </button>
                 </div>
@@ -37,19 +37,33 @@
                     </div>
                 </div>
             </form>
+
+            <p v-if="error" class="error">{{ error }}</p>
         </article>
 
-        <SurveyListView />
+        <!-- Ergebnisse: Download JSON (nach Erstellung sichtbar) -->
+        <article v-if="surveyId" class="card stack" style="--space: var(--s-6)">
+            <header class="cluster between center">
+                <h1 class="h1">{{ t('results.title') }}</h1>
+            </header>
+            <div class="stack" style="--space: var(--s-4)">
+                <RouterLink class="btn" to="/surveys">{{ t('results.back') }}</RouterLink>
+                <button class="btn" @click="downloadJson">
+                    {{ t('results.json') }}
+                </button>
+            </div>
+            <p v-if="error" class="error">{{ error }}</p>
+        </article>
     </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, nextTick } from 'vue'
 import { Api } from '@/api/client'
-import type { TeamLite, SurveyDto } from '@/types'
+import type { TeamLite } from '@/types'
 import { useStore } from '@/store'
 import { useI18n } from 'vue-i18n'
-import SurveyListView from './SurveyListView.vue'
+import { RouterLink } from 'vue-router'
 
 const { t } = useI18n()
 const state = useStore()
@@ -60,14 +74,19 @@ const myTeams = ref<TeamLite[]>([])
 const questions = ref<string[]>(['', '', '', '', ''])
 
 const surveyId = ref<string>('')
-const surveys = ref<(SurveyDto & { teamName?: string })[]>([])
+
+const error = ref<string | null>(null)
+const errorStatus = ref<number | null>(null) // aktuell nur gesetzt, falls benötigt
 
 onMounted(async () => {
-    const teams = await Api.myTeams()
-    myTeams.value = teams
-    await nextTick()
-    teamId.value = teams[0]?.id ?? ''
-    surveys.value = await Api.listMySurveys()
+    try {
+        const teams = await Api.myTeams()
+        myTeams.value = teams
+        await nextTick()
+        teamId.value = teams[0]?.id ?? ''
+    } catch (e: any) {
+        error.value = e?.response?.data?.message || e?.message || 'Failed to load teams'
+    }
 })
 
 async function create() {
@@ -92,15 +111,29 @@ async function create() {
     // Formular zurücksetzen & Liste aktualisieren
     title.value = ''
     questions.value = ['', '', '', '', '']
-    surveys.value = await Api.listMySurveys()
 }
 
 async function issueTeam() {
     if (!surveyId.value) return
-    const { created } = await Api.ensureTokensForTeam(surveyId.value)
-    alert(t('surveys.create.issuedTeamTokensToast', { n: created }))
+    try {
+        const { created } = await Api.ensureTokensForTeam(surveyId.value)
+        alert(t('surveys.create.issuedTeamTokensToast', { n: created }))
+    } catch (e: any) {
+        error.value = e?.response?.data?.message || e?.message || 'Token issue failed'
+        errorStatus.value = e?.response?.status ?? null
+    }
 }
 
+async function downloadJson() {
+    if (!surveyId.value) return
+    try {
+        const url = await Api.getResultsDownloadLink(surveyId.value)
+        window.location.href = url
+    } catch (e: any) {
+        error.value = e?.response?.data?.message || e?.message || 'Download failed'
+        errorStatus.value = e?.response?.status ?? null
+    }
+}
 </script>
 
 <style scoped>
@@ -108,19 +141,12 @@ async function issueTeam() {
 :root,
 .admin-page {
     --s-1: 0.25rem;
-    /* 4 */
     --s-2: 0.5rem;
-    /* 8 */
     --s-3: 0.75rem;
-    /* 12 */
     --s-4: 1rem;
-    /* 16 */
     --s-5: 1.25rem;
-    /* 20 */
     --s-6: 1.5rem;
-    /* 24 */
     --s-8: 2rem;
-    /* 32 */
 }
 
 .h1 {
@@ -219,37 +245,12 @@ async function issueTeam() {
     filter: brightness(0.95);
 }
 
-.empty {
-    color: #9ca3af;
-    text-align: center;
-}
-
-.mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-/* -------- Tabelle -------- */
-.table-wrap {
-    overflow-x: auto;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.table th,
-.table td {
-    text-align: left;
-    padding: 0.6rem 0.5rem;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: middle;
-}
-
-.table thead th {
-    font-weight: 600;
-    color: #6b7280;
-    background: #fafafa;
+.error {
+    color: #b00020;
+    background: #ffd8df;
+    border: 1px solid #ffb3bf;
+    padding: .6rem .75rem;
+    border-radius: 8px;
 }
 
 .w-0 {

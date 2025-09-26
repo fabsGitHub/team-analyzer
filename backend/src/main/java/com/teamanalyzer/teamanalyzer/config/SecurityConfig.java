@@ -47,10 +47,15 @@ public class SecurityConfig {
             .requestMatchers(HttpMethod.POST, "/api/surveys/*/responses").permitAll()
 
             // Survey-Management nur eingeloggt; fachliche Prüfung macht der Controller
-            .requestMatchers("/api/surveys/**").authenticated()
+           // .requestMatchers("/api/surveys/**").authenticated()
 
             // Admin-Bereich
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+            // Download Link
+            .requestMatchers(HttpMethod.GET, "/api/surveys/*").permitAll() // Fragen lesen
+            .requestMatchers(HttpMethod.POST, "/api/surveys/*/responses").permitAll()
+            .requestMatchers(HttpMethod.GET, "/api/surveys/*/results/download").permitAll() // ← neu
 
             // Rest
             .anyRequest().authenticated())

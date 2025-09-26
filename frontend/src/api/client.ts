@@ -88,40 +88,7 @@ function isAuthEndpoint(url?: string | null): boolean {
   )
 }
 
-// ---- REQUEST: Auth + Cancel-Group + Per-Request Timeout ----
-http.interceptors.request.use((config) => {
-  // Beim Refresh/Login/etc. keine alte Authorization anhängen.
-  if (!isAuthEndpoint(config.url) && !config.skipAuthHeader) {
-    const token = getToken()
-    config.headers = setAuthHeader(config.headers, token)
-  }
-
-  // Cancel-Group: vorherigen laufenden Request abbrechen
-  let controller: AbortController | undefined
-  if (config.cancelGroup) {
-    inflightByGroup.get(config.cancelGroup)?.abort('newer request')
-    controller = new AbortController()
-    inflightByGroup.set(config.cancelGroup, controller)
-  }
-
-  // Per-Request Timeout
-  if (config.timeoutMs) {
-    controller = controller ?? new AbortController()
-    setTimeout(() => controller?.abort('timeout'), config.timeoutMs)
-  }
-
-  if (controller && !config.signal) {
-    config.signal = controller.signal
-  }
-
-  return config
-})
-
-// ---- Refresh pipeline (single-flight) ----
-let isRefreshing = false
-type Waiter = { onToken: (tok: string) => void; onError: (err: any) => void }
-let pending: Waiter[] = []
-
+// ---- Refresh pipeline: shared promise (single-flight, robust) ----
 async function refreshAccessToken(): Promise<string> {
   // Cookie-basiert; KEINE Authorization anhängen
   const { data } = await http.post<{ accessToken: string }>(
@@ -140,6 +107,99 @@ async function refreshAccessToken(): Promise<string> {
   )
   return data.accessToken
 }
+
+let refreshPromise: Promise<string> | null = null
+function ensureRefresh(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken()
+      .then((tok) => {
+        refreshPromise = null
+        return tok
+      })
+      .catch((e) => {
+        refreshPromise = null
+        setToken('')
+        delete (http.defaults.headers as any).common?.Authorization
+        throw e
+      })
+  }
+  return refreshPromise
+}
+
+/** NEU: Session vorwärmen – holt per Cookie ein Access-Token, falls keins im Speicher ist. */
+export async function prewarmSession(): Promise<boolean> {
+  if (getToken()) return true
+  try {
+    await ensureRefresh()
+    return !!getToken()
+  } catch {
+    return false
+  }
+}
+
+let mePromise: Promise<any> | null = null
+export async function fetchMeOnce() {
+  if (!mePromise) {
+    mePromise = http
+      .get('/me', {
+        cancelGroup: 'me', // ältere /me abbrechen
+        retry: 0,
+        timeoutMs: 8000,
+      })
+      .then((r) => r.data)
+      .finally(() => {
+        mePromise = null
+      })
+  }
+  return mePromise
+}
+
+// NEU: Vor jedem Request sicherstellen, dass bei geschützen Routen ein Token vorhanden ist
+async function ensureAccessTokenForRequest(
+  cfg: AxiosRequestConfig,
+): Promise<string | undefined> {
+  if (isAuthEndpoint(cfg.url) || cfg.skipAuthHeader || cfg.allowAnonymous) {
+    return undefined
+  }
+  const existing = getToken()
+  if (existing) return existing
+  // Falls kein Access-Token im Speicher: per Cookie refreshen (single-flight).
+  try {
+    return await ensureRefresh()
+  } catch {
+    // Kein Refresh möglich (z.B. kein Refresh-Cookie) → anonym weiter
+    return undefined
+  }
+}
+
+// ---- REQUEST: Auth + Cancel-Group + Per-Request Timeout ----
+// WICHTIG: async, damit Pre-Flight-Refresh möglich ist
+http.interceptors.request.use(async (config) => {
+  // Cancel-Group: vorherigen laufenden Request abbrechen
+  let controller: AbortController | undefined
+  if (config.cancelGroup) {
+    inflightByGroup.get(config.cancelGroup)?.abort('newer request')
+    controller = new AbortController()
+    inflightByGroup.set(config.cancelGroup, controller)
+  }
+
+  // Per-Request Timeout
+  if (config.timeoutMs) {
+    controller = controller ?? new AbortController()
+    setTimeout(() => controller?.abort('timeout'), config.timeoutMs)
+  }
+  if (controller && !config.signal) {
+    config.signal = controller.signal
+  }
+
+  // Beim Refresh/Login/etc. keine alte Authorization anhängen.
+  if (!isAuthEndpoint(config.url) && !config.skipAuthHeader) {
+    const token = (await ensureAccessTokenForRequest(config)) ?? getToken()
+    config.headers = setAuthHeader(config.headers, token)
+  }
+
+  return config
+})
 
 // ---- RESPONSE: Cleanup + Refresh + Auto-Retry ----
 http.interceptors.response.use(
@@ -173,43 +233,27 @@ http.interceptors.response.use(
 
     const isUnauth = resp.status === 401 || resp.status === 419
 
-    // 401 auf anonymen Calls: direkt raus, kein Refresh
+    // 401/419 auf anonymen Calls nicht bubblen → stilles 204
     if (isUnauth && cfg.allowAnonymous) {
-      return Promise.reject(error)
+      return Promise.resolve({
+        data: undefined,
+        status: 204,
+        statusText: 'No Content (anonymous)',
+        headers: {},
+        config: cfg,
+      } as AxiosResponse)
     }
 
-    // Refresh (nicht bei Auth-Endpunkten / nicht doppelt)
+    // 401/419 → genau einmal refreshen und retryen (nicht bei Auth-Endpunkten)
     if (isUnauth && !authCall && !cfg._retry) {
       cfg._retry = true
-
-      if (!isRefreshing) {
-        isRefreshing = true
-        try {
-          const newTok = await refreshAccessToken()
-          pending.forEach((w) => w.onToken(newTok))
-          pending = []
-        } catch (e) {
-          pending.forEach((w) => w.onError(e))
-          pending = []
-          setToken('')
-          delete (http.defaults.headers as any).common?.Authorization
-          isRefreshing = false
-          throw e
-        } finally {
-          isRefreshing = false
-        }
+      try {
+        const newTok = await ensureRefresh()
+        cfg.headers = setAuthHeader(cfg.headers, newTok)
+        return http.request(cfg) // RETRY mit frischem Token
+      } catch (e) {
+        return Promise.reject(e)
       }
-
-      // warten bis Refresh fertig und Original-Request wiederholen
-      return new Promise<AxiosResponse>((resolve, reject) => {
-        pending.push({
-          onToken: (tok) => {
-            cfg.headers = setAuthHeader(cfg.headers, tok)
-            http.request(cfg).then(resolve).catch(reject)
-          },
-          onError: (err) => reject(err),
-        })
-      })
     }
 
     // ---- Auto-Retry bei transienten Fehlern (nur GET) ----
@@ -228,6 +272,7 @@ http.interceptors.response.use(
       error.code === 'ERR_CANCELED' ||
       error.message === 'newer request' ||
       error.message === 'manual abort'
+
     if (
       method === 'get' &&
       max > 0 &&
@@ -247,6 +292,7 @@ http.interceptors.response.use(
 
 // -------- Public API --------
 export const Api = {
+  prewarmSession,
   // Auth
   async register(email: string, password: string): Promise<void> {
     await http.post(
@@ -279,15 +325,19 @@ export const Api = {
       delete (http.defaults.headers as any).common?.Authorization
     }
   },
+
   async me(): Promise<{
     email: string
     roles: string[]
     id: string
     isLeader: boolean
   }> {
-    const { data } = await http.get('/me')
+    // NEU: vor dem /me-Call sicherstellen, dass ein gültiger Bearer da ist
+    await prewarmSession()
+    const data = await fetchMeOnce()
     return data
   },
+
   async meAnonymousOk(): Promise<void> {
     await http.get('/me', { allowAnonymous: true })
   },
@@ -305,12 +355,19 @@ export const Api = {
     })
     return data
   },
+
+  // WICHTIG: Teilnahme ohne Login -> allowAnonymous setzen
   async submitSurveyResponses(
     id: string,
     body: SubmitSurveyRequest,
   ): Promise<void> {
-    await http.post(`/surveys/${id}/responses`, body)
+    await http.post(`/surveys/${id}/responses`, body, {
+      allowAnonymous: true,
+      cancelGroup: 'survey-submit',
+      timeoutMs: 10000,
+    })
   },
+
   async getSurveyResults(id: string): Promise<SurveyResultsDto> {
     const { data } = await http.get<SurveyResultsDto>(
       `/surveys/${id}/results`,
@@ -331,6 +388,18 @@ export const Api = {
     })
     return data
   },
+  async getResultsDownloadLink(id: string): Promise<string> {
+    const { data } = await http.get<{ url: string }>(
+      `/surveys/${id}/results/download-link`,
+      {
+        retry: 1,
+        timeoutMs: 8000,
+      },
+    )
+    return data.url
+  },
+
+  // Invite-Link für Teilnehmer (ohne /api → öffnet die SPA)
   buildSurveyInviteLink(surveyId: string, token: string): string {
     const base = window.location.origin
     return `${base}/surveys/${surveyId}?token=${encodeURIComponent(token)}`

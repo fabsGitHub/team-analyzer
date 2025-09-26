@@ -33,6 +33,7 @@ app:
     hmac-secret: "${EMAIL_VERIFY_HMAC_SECRET}"
   frontend-base-url: "http://localhost:5173"
   verify-endpoint-path: "/verify"
+  download-token-secret: "${DOWNLOAD_TOKEN_HMAC_SECRET}"
   jwt:
     secret: ${APP_JWT_SECRET_BASE64} # aus deiner ersten Datei
 
