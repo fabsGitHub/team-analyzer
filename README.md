@@ -94,7 +94,7 @@ Diese Werte werden u. a. verwendet für:
 - **E-Mail-Verifizierungs-Token** (`EMAIL_VERIFY_HMAC_SECRET`)
 - **Signierte Download-Links** für Ergebnisse (`DOWNLOAD_TOKEN_HMAC_SECRET`)
 
-> Docker Compose lädt in der Regel eine `.env` im Projekt-Root automatisch und injiziert die Variablen in Container (siehe `docker/docker-compose.yml`).
+> Docker Compose lädt in der Regel eine `.env.production` im Projekt-Root automatisch und injiziert die Variablen in Container (siehe `docker/docker-compose.yml`).
 
 ### Frontend (Vite)
 

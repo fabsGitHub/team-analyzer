@@ -3,3 +3,8 @@
 .git
 .gitignore
 .DS_Store
+gitkey
+*.pem
+*.key
+.env
+.env.*
