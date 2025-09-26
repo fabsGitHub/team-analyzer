@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -121,17 +122,22 @@ public class AuthController {
             }
         }
 
-        return ResponseEntity.ok().build();
+        return ResponseEntity.accepted().build();
     }
 
     // --- Verify ---
-    @GetMapping("/verify")
-    public ResponseEntity<?> verify(@RequestParam String token) {
+    // POST – „korrekt“ für API Clients
+    @PostMapping("/verify")
+    public ResponseEntity<Void> verifyPost(@RequestBody Map<String, String> body) {
+        String token = body.get("token");
+        if (token == null || token.isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        return doVerify(token);
+    }
+
+    private ResponseEntity<Void> doVerify(String token) {
         String email = emailTokenSvc.validateAndGetEmail(token);
-
-        var user = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
+        var user = users.findByEmail(email).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!user.isEnabled()) {
             user.setEnabled(true);
             user.setEmailVerifiedAt(Instant.now());
@@ -143,8 +149,8 @@ public class AuthController {
     // --- Login ---
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginDto dto,
-                                               HttpServletRequest req,
-                                               HttpServletResponse res) {
+            HttpServletRequest req,
+            HttpServletResponse res) {
         String email = dto.email().trim().toLowerCase();
         var u = users.findByEmailWithRoles(email).orElseThrow(() -> new BadCredentialsException("x"));
         if (!u.isEnabled() || !enc.matches(dto.password(), u.getPasswordHash()))
@@ -167,7 +173,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@CookieValue("refresh_token") String refresh,
-                                                 HttpServletResponse res) {
+            HttpServletResponse res) {
         var hash = sha256(refresh);
         var rt = tokens.findActiveByHashWithUserAndRoles(hash)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
@@ -203,8 +209,8 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@CookieValue("refresh_token") String refresh,
-                                       HttpServletRequest req,
-                                       HttpServletResponse res) {
+            HttpServletRequest req,
+            HttpServletResponse res) {
         tokens.revokeByHash(sha256(refresh));
         res.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie("", req, 0).toString());
         return ResponseEntity.noContent().build();
@@ -237,5 +243,6 @@ public class AuthController {
         }
     }
 
-    record TokenResponse(String accessToken) {}
+    record TokenResponse(String accessToken) {
+    }
 }

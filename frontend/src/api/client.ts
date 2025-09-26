@@ -389,14 +389,18 @@ export const Api = {
     return data
   },
   async getResultsDownloadLink(id: string): Promise<string> {
-    const { data } = await http.get<{ url: string }>(
-      `/surveys/${id}/results/download-link`,
+    const { data } = await http.post<{ url: string }>(
+      `/surveys/${id}/download-tokens`,
       {
         retry: 1,
         timeoutMs: 8000,
       },
     )
     return data.url
+  },
+
+  async verifyEmail(token: string): Promise<void> {
+    await http.post('/auth/verify', { token }, { skipAuthHeader: true })
   },
 
   // Invite-Link für Teilnehmer (ohne /api → öffnet die SPA)
@@ -425,27 +429,29 @@ export const Api = {
     })
     return data
   },
+  // Team anlegen: JSON-Body, 201 Created
   async createTeamAdmin(name: string, leaderUserId: string): Promise<void> {
-    await http.post('/admin/teams', null, { params: { name, leaderUserId } })
+    await http.post('/admin/teams', { name, leaderUserId })
   },
-  async addMemberAdmin(
+
+  // Mitglied anlegen/aktualisieren (idempotent)
+  async addOrUpdateMemberAdmin(
     teamId: string,
     userId: string,
     leader = false,
   ): Promise<void> {
-    await http.post(`/admin/teams/${teamId}/members`, null, {
-      params: { userId, leader },
-    })
+    await http.put(`/admin/teams/${teamId}/members/${userId}`, { leader })
   },
+
+  // setLeaderAdmin -> konsolidiert in addOrUpdateMemberAdmin()
   async setLeaderAdmin(
     teamId: string,
     userId: string,
     leader: boolean,
   ): Promise<void> {
-    await http.patch(`/admin/teams/${teamId}/leader`, null, {
-      params: { userId, leader },
-    })
+    await http.put(`/admin/teams/${teamId}/members/${userId}`, { leader })
   },
+
   async removeMemberAdmin(teamId: string, userId: string): Promise<void> {
     await http.delete(`/admin/teams/${teamId}/members/${userId}`)
   },
@@ -470,7 +476,7 @@ export const Api = {
   async myTokenForSurvey(
     surveyId: string,
   ): Promise<{ created: boolean; inviteLink?: string }> {
-    const { data } = await http.get(`/surveys/${surveyId}/my-token`, {
+    const { data } = await http.put(`/surveys/${surveyId}/my-token`, {
       retry: 2,
       timeoutMs: 8000,
     })

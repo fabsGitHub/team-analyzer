@@ -1,5 +1,6 @@
 package com.teamanalyzer.teamanalyzer.web;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -60,11 +61,11 @@ public class SurveyController {
 
   // --- Survey anlegen (Leader des Teams oder Admin) ---
   @PostMapping
-  public SurveyDto create(@AuthenticationPrincipal AuthUser me,
+  public ResponseEntity<SurveyDto> create(
+      @AuthenticationPrincipal AuthUser me,
       @RequestBody @Validated CreateSurveyRequest req) {
-    if (req.getQuestions() == null || req.getQuestions().size() != 5) {
+    if (req.getQuestions() == null || req.getQuestions().size() != 5)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Require exactly 5 questions");
-    }
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
     if (req.getTeamId() == null)
@@ -72,12 +73,14 @@ public class SurveyController {
 
     boolean isAdmin = hasRole("ROLE_ADMIN");
     boolean isLeaderOfTeam = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(req.getTeamId(), me.userId());
-    if (!(isAdmin || isLeaderOfTeam)) {
+    if (!(isAdmin || isLeaderOfTeam))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You must be leader of the selected team");
-    }
 
     var survey = surveyService.createSurvey(me.userId(), req.getTeamId(), req.getTitle(), req.getQuestions());
-    return surveyService.getSurvey(survey.getId());
+    var dto = surveyService.getSurvey(survey.getId());
+    return ResponseEntity
+        .created(URI.create("/api/surveys/" + survey.getId()))
+        .body(dto);
   }
 
   // --- Fragen lesen (öffentlich) ---
@@ -127,10 +130,11 @@ public class SurveyController {
     return Map.of("created", created, "surveyId", id);
   }
 
-  // --- Mitglied holt seinen persönlichen Token (oder bekommt einen neuen) ---
-  @GetMapping("/{id}/my-token")
-  public MyTokenDto getOrCreateMyToken(@AuthenticationPrincipal AuthUser me,
-      @PathVariable UUID id, HttpServletRequest req) {
+  @PutMapping("/{id}/my-token")
+  public com.teamanalyzer.teamanalyzer.web.dto.MyTokenDto ensureMyToken(
+      @AuthenticationPrincipal AuthUser me,
+      @PathVariable UUID id,
+      HttpServletRequest req) {
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
@@ -142,12 +146,14 @@ public class SurveyController {
     }
 
     Survey surveyRef = em.getReference(Survey.class, id);
+
+    // idempotent: erzeugt NUR, wenn noch kein aktives Token existiert
     String plain = tokenService.ensurePersonalToken(surveyRef, me.userId(), me.email());
 
     boolean created = (plain != null);
     String inviteLink = (plain != null) ? buildInviteLink(req, id, plain) : null;
 
-    return new MyTokenDto(created, inviteLink);
+    return new com.teamanalyzer.teamanalyzer.web.dto.MyTokenDto(created, inviteLink);
   }
 
   // --- Mitglied fordert bewusst einen neuen (alte werden revoked) ---
@@ -170,8 +176,34 @@ public class SurveyController {
     return new MyTokenDto(true, inviteLink);
   }
 
-  @GetMapping("/{id}/results/download-link")
-  public Map<String, String> makeDownloadLink(@AuthenticationPrincipal AuthUser me, @PathVariable UUID id,
+  /*
+   * @GetMapping("/{id}/results/download-link")
+   * public Map<String, String> makeDownloadLink(@AuthenticationPrincipal AuthUser
+   * me, @PathVariable UUID id,
+   * HttpServletRequest req) {
+   * if (me == null || me.userId() == null)
+   * throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+   * boolean isAdmin = hasRole("ROLE_ADMIN");
+   * boolean isLeaderOfTeam =
+   * surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id,
+   * me.userId());
+   * if (!(isAdmin || isLeaderOfTeam))
+   * throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+   * 
+   * String dl = downloadTokens.issue(id, me.userId(),
+   * java.time.Duration.ofMinutes(5));
+   * String base = (frontendBaseUrl != null && !frontendBaseUrl.isBlank())
+   * ? frontendBaseUrl.replaceAll("/+$", "")
+   * : buildBaseFromRequest(req);
+   * String url = base + "/api/surveys/" + id + "/results/download?dl=" + dl;
+   * return Map.of("url", url);
+   * }
+   */
+
+  @PostMapping("/{id}/download-tokens")
+  public ResponseEntity<Map<String, String>> createDownloadLink(
+      @AuthenticationPrincipal AuthUser me,
+      @PathVariable UUID id,
       HttpServletRequest req) {
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
@@ -185,7 +217,10 @@ public class SurveyController {
         ? frontendBaseUrl.replaceAll("/+$", "")
         : buildBaseFromRequest(req);
     String url = base + "/api/surveys/" + id + "/results/download?dl=" + dl;
-    return Map.of("url", url);
+
+    return ResponseEntity
+        .created(URI.create(url))
+        .body(Map.of("url", url));
   }
 
   @GetMapping("/{id}/results/download")

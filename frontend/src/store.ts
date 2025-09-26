@@ -362,7 +362,7 @@ export const useStore = (): StoreApi => {
     userId: string,
     leader = false,
   ) {
-    await Api.addMemberAdmin(teamId, userId, leader)
+    await Api.addOrUpdateMemberAdmin(teamId, userId, leader)
     toast($t('team.member_added') || 'Mitglied hinzugefügt.')
     await loadTeamsAdmin()
   }

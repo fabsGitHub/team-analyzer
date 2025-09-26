@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -114,6 +115,11 @@ public class TokenService {
     @Transactional(readOnly = true)
     public List<SurveyToken> listOpenTokensForUser(UUID userId) {
         return tokenRepo.findOpenByUser(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<SurveyToken> findActivePersonalToken(UUID surveyId, UUID userId) {
+        return tokenRepo.findFirstBySurvey_IdAndIssuedToUser_IdAndRedeemedFalseAndRevokedFalse(surveyId, userId);
     }
 
     /** Einlösen: prüft Gültigkeit, markiert, gibt Token zurück */

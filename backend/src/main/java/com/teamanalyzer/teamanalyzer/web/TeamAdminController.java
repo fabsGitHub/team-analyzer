@@ -1,6 +1,7 @@
 // src/main/java/com/teamanalyzer/teamanalyzer/web/TeamAdminController.java
 package com.teamanalyzer.teamanalyzer.web;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,6 +21,7 @@ import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamRepository;
 import com.teamanalyzer.teamanalyzer.repo.UserRepository;
 import com.teamanalyzer.teamanalyzer.service.TeamService;
+import com.teamanalyzer.teamanalyzer.web.dto.CreateTeamRequestDto;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,6 +30,11 @@ import lombok.RequiredArgsConstructor;
 @PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class TeamAdminController {
+
+    // Request-Body für Member-Update
+    public record UpdateMemberRequest(boolean leader) {
+    }
+
     private final TeamService teamService;
 
     private final TeamRepository teamRepo;
@@ -35,8 +42,10 @@ public class TeamAdminController {
     private final TeamMemberRepository teamMemberRepo;
 
     @PostMapping
-    public Team create(@RequestParam String name, @RequestParam UUID leaderUserId) {
-        return teamService.createTeam(name, leaderUserId); // legt Team an + 1 Leader
+    public ResponseEntity<Team> create(@RequestBody CreateTeamRequestDto body) {
+        var team = teamService.createTeam(body.name(), body.leaderUserId());
+        return ResponseEntity.created(URI.create("/api/admin/teams/" + team.getId()))
+                .body(team);
     }
 
     @GetMapping
@@ -46,28 +55,33 @@ public class TeamAdminController {
                 .toList();
     }
 
-    @PostMapping("/{teamId}/members")
+    @PutMapping("/{teamId}/members/{userId}")
     @Transactional
-    public void addMember(@PathVariable UUID teamId,
-            @RequestParam UUID userId,
-            @RequestParam(defaultValue = "false") boolean leader) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void upsertMember(@PathVariable UUID teamId,
+            @PathVariable UUID userId,
+            @RequestBody UpdateMemberRequest body) {
 
         Team team = teamRepo.findById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        var m = new TeamMember();
-        m.setTeam(team);
-        m.setUser(user);
-        m.setLeader(leader);
-        teamMemberRepo.save(m);
+        var key = new TeamMemberKey(teamId, userId);
+        var member = teamMemberRepo.findById(key).orElseGet(() -> {
+            var m = new TeamMember();
+            m.setTeam(team);
+            m.setUser(user);
+            return m;
+        });
 
-        if (leader) {
-            // Jetzt ist der User mindestens in einem Team Leader -> Rolle sicherstellen
-            if (user.getRoles().add(Role.LEADER)) {
-                userRepo.save(user);
-            }
+        boolean prevLeader = member.isLeader();
+        member.setLeader(body.leader());
+        teamMemberRepo.save(member);
+
+        // Rollen-Sync nur, wenn sich etwas ändert oder neu angelegt wurde
+        if (prevLeader != body.leader() || member.getCreatedAt() == null) {
+            syncLeaderRole(user);
         }
     }
 

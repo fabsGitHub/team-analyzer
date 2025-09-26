@@ -194,7 +194,7 @@ async function createTeam() {
 
 async function addMember(teamId: string) {
   const input = ensureMemberInput(teamId)
-  await Api.addMemberAdmin(teamId, input.userId.trim(), input.leader)
+  await Api.addOrUpdateMemberAdmin(teamId, input.userId.trim(), input.leader)
   input.userId = ''
   input.leader = false
   await loadTeams()

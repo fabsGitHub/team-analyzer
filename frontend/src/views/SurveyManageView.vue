@@ -40,20 +40,6 @@
 
             <p v-if="error" class="error">{{ error }}</p>
         </article>
-
-        <!-- Ergebnisse: Download JSON (nach Erstellung sichtbar) -->
-        <article v-if="surveyId" class="card stack" style="--space: var(--s-6)">
-            <header class="cluster between center">
-                <h1 class="h1">{{ t('results.title') }}</h1>
-            </header>
-            <div class="stack" style="--space: var(--s-4)">
-                <RouterLink class="btn" to="/surveys">{{ t('results.back') }}</RouterLink>
-                <button class="btn" @click="downloadJson">
-                    {{ t('results.json') }}
-                </button>
-            </div>
-            <p v-if="error" class="error">{{ error }}</p>
-        </article>
     </section>
 </template>
 
@@ -63,7 +49,6 @@ import { Api } from '@/api/client'
 import type { TeamLite } from '@/types'
 import { useStore } from '@/store'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 
 const { t } = useI18n()
 const state = useStore()
@@ -120,17 +105,6 @@ async function issueTeam() {
         alert(t('surveys.create.issuedTeamTokensToast', { n: created }))
     } catch (e: any) {
         error.value = e?.response?.data?.message || e?.message || 'Token issue failed'
-        errorStatus.value = e?.response?.status ?? null
-    }
-}
-
-async function downloadJson() {
-    if (!surveyId.value) return
-    try {
-        const url = await Api.getResultsDownloadLink(surveyId.value)
-        window.location.href = url
-    } catch (e: any) {
-        error.value = e?.response?.data?.message || e?.message || 'Download failed'
         errorStatus.value = e?.response?.status ?? null
     }
 }
