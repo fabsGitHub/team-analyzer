@@ -1,9 +1,9 @@
 <!-- frontend/src/components/HeaderNav.vue -->
 <template>
-    <header class="nav" role="banner" v-if="state.state.user">
+    <header class="nav" role="banner">
         <div class="navwrap">
             <div class="brand" aria-label="App" @click="router.push('/my/tokens')" style="cursor:pointer" tabindex="0"
-                @keydown.enter="router.push('/my/tokens')">x
+                @keydown.enter="router.push('/my/tokens')">
                 {{ t('app') }}
             </div>
 
@@ -40,21 +40,26 @@
 
                 <div v-show="menuOpen" class="menu" role="menu" @click.stop>
                     <div class="menu-header">
+                        {{ t('user.email') }}:
                         <div class="menu-email">{{ state.state.user?.email }}</div>
+                        {{ t('user.id') }}:
                         <div class="menu-email">{{ state.state.user?.id }}</div>
+                        {{ t('user.roles') }}:
                         <div class="menu-email">{{ state.state.user?.roles.join(', ') }}</div>
                     </div>
                     <div class="menu-sep" />
                     <!-- Sprache ins Menü -->
-                    <label class="label" for="lang">Sprache</label>
-                    <select id="lang" class="select" @change="onLang" :value="locale" style="margin:.25rem 0 .5rem">
-                        <option value="de">Deutsch</option>
-                        <option value="en">English</option>
-                    </select>
+
                     <div class="menu-sep" />
                     <button class="menu-item" role="menuitem" @click="onLogout">{{ t('user.logout') || 'Abmelden'
-                    }}</button>
+                        }}</button>
                 </div>
+            </div>
+            <div class="lang">
+                <select id="lang" class="select" @change="onLang" :value="locale" style="margin:.25rem 0 .5rem">
+                    <option value="de">{{ t('nav.language.de') }}</option>
+                    <option value="en">{{ t('nav.language.en') }}</option>
+                </select>
             </div>
         </div>
     </header>
@@ -70,7 +75,11 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const state = useStore()
-function onLang(e: Event) { locale.value = (e.target as HTMLSelectElement).value }
+function onLang(e: Event) {
+    const lang = (e.target as HTMLSelectElement).value as 'de' | 'en'
+    state.setLanguage(lang)  // 👈 persistiert in Session + setzt i18n global
+    locale.value = lang      // (optional) sofortiges local-Update
+}
 const menuOpen = ref(false); const toggleMenu = () => menuOpen.value = !menuOpen.value
 const close = () => menuOpen.value = false; const onWindowClick = () => close()
 onMounted(() => window.addEventListener('click', onWindowClick))

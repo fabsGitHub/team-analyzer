@@ -62,6 +62,7 @@ interface State {
   teamsAdmin: TeamAdminDto[]
   adminLoading: boolean
   adminError: string
+  language?: string
 }
 
 interface StoreApi {
@@ -106,6 +107,7 @@ interface StoreApi {
   // ui
   toast(text: string, type?: ToastType['type']): void
   dismiss(id: string): void
+  setLanguage(lang: string): void
 }
 
 const state: State = reactive({
@@ -129,6 +131,7 @@ const state: State = reactive({
   teamsAdmin: [],
   adminLoading: false,
   adminError: '',
+  language: 'de',
 })
 
 const isLoggedIn = () => !!state.user?.email
@@ -141,6 +144,15 @@ function toast(text: string, type?: ToastType['type']) {
   setTimeout(() => dismiss(id), 2500)
 }
 
+function setI18nLocale(lang: string) {
+  const loc = (i18n.global as any).locale
+  if (loc && typeof loc === 'object' && 'value' in loc) {
+    loc.value = lang // Composition API
+  } else {
+    ;(i18n.global as any).locale = lang // Fallback
+  }
+}
+
 useAuthToken(
   () => state.token,
   (t) => (state.token = t),
@@ -151,21 +163,31 @@ export const useStore = (): StoreApi => {
   function setUser(u: { email: string; roles: string[] } | null) {
     state.user = u
   }
+
+  // WICHTIG: init() soll auf Public-Seiten keinen Refresh triggern
   async function init() {
+    try {
+      const saved =
+        typeof window !== 'undefined'
+          ? sessionStorage.getItem('app.lang') ||
+            localStorage.getItem('app.lang')
+          : null
+      if (saved === 'de' || saved === 'en') {
+        state.language = saved
+        setI18nLocale(saved)
+      }
+    } catch {}
     state.loading = true
     state.error = ''
     try {
-      if (!state.user) {
-        try {
-          state.user = await Api.me()
-        } catch {
-          /* guest */
-        }
-      }
+      // "soft" /me: 401 erlaubt → kein Refresh
+      await Api.meAnonymousOk()
+      // wenn der Benutzer bereits eingeloggt ist, holt der Routen-Guard später das echte /me
     } finally {
       state.loading = false
     }
   }
+
   async function login(email: string, password: string) {
     await Api.login(email, password)
     state.user = await Api.me()
@@ -208,10 +230,10 @@ export const useStore = (): StoreApi => {
     state.surveyError = ''
     try {
       const dto = await Api.getSurvey(surveyId)
-      if (isStale('survey', run)) return // spätes Ergebnis ignorieren
+      if (isStale('survey', run)) return
       state.currentSurvey = dto
     } catch (e: any) {
-      if (isCanceledError(e)) return // Abbruch nicht als Fehler zeigen
+      if (isCanceledError(e)) return
       if (isStale('survey', run)) return
       state.surveyError = e?.message || String(e)
       throw e
@@ -359,6 +381,14 @@ export const useStore = (): StoreApi => {
     await loadTeamsAdmin()
   }
 
+  function setLanguage(lang: string) {
+    state.language = lang
+    setI18nLocale(lang)
+    try {
+      sessionStorage.setItem('app.lang', lang) // 👈 nur für diese Sitzung
+    } catch {}
+  }
+
   return {
     state,
     // auth
@@ -387,5 +417,6 @@ export const useStore = (): StoreApi => {
     // ui
     toast,
     dismiss,
+    setLanguage,
   }
 }
