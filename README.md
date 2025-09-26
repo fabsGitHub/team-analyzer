@@ -44,7 +44,7 @@ Ein kleines Full-Stack-Demo-Projekt zum Erstellen, Einladen und Auswerten von Te
 
 ## Schnellstart (Docker)
 
-> Voraussetzungen: Docker & Docker Compose installiert.
+> Voraussetzungen: Docker & Docker Compose installiert. FILE IST NICHT FÜR WINDOWS AUSGELEGT
 
 ```bash
 # aus dem Repository-Root:
