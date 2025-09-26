@@ -7,16 +7,20 @@
 
       <ol class="steps stack" style="--space: var(--s-3)">
         <li>
-          <strong>{{ t('nav.evaluate') }}</strong>:
-          {{ t('tutorial.step1') }}
+          <strong>{{ t('tutorial.guide.adminTitle') }}</strong>:
+          {{ t('tutorial.guide.admin') }}
         </li>
         <li>
-          <strong>{{ t('nav.analysis') }}</strong>:
-          {{ t('tutorial.step2') }}
+          <strong>{{ t('tutorial.guide.leaderTitle') }}</strong>:
+          {{ t('tutorial.guide.leader') }}
         </li>
         <li>
-          <strong>{{ t('tutorial.tip') }}</strong>:
-          {{ t('tutorial.step3') }}
+          <strong>{{ t('tutorial.guide.memberTitle') }}</strong>:
+          {{ t('tutorial.guide.member') }}
+        </li>
+        <li>
+          <strong>{{ t('tutorial.guide.anonTitle') }}</strong>:
+          {{ t('tutorial.guide.anon') }}
         </li>
       </ol>
 

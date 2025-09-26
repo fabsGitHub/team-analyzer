@@ -184,6 +184,20 @@ const de = {
       'Wähle bis zu 3 Teams aus, vergleiche sie im Radar-Diagramm und klicke auf ein Badge für Details.',
     tip: 'Tipp',
     step3: 'Mit Strg/Cmd oder Shift kannst du mehrere Teams auswählen.',
+    guide: {
+      adminTitle: 'Admin',
+      admin:
+        'Nur sichtbar für Nutzer mit der Rolle Admin. Auf der Admin-Seite kannst du Teams anlegen/verwalten und Teamleiter zuweisen.',
+      leaderTitle: 'Teamleiter',
+      leader:
+        'Teamleiter können Umfragen für ein Team erstellen. Beim Erstellen einer Umfrage wird automatisch ein Token pro Teammitglied generiert (z. B. 5 Mitglieder → 5 Tokens).',
+      memberTitle: 'Teammitglieder',
+      member:
+        'Öffne „Meine Tokens“, wähle einen offenen Token und starte die Umfrage — oder nutze den Einladungslink per E-Mail. Jeder Token ist nur einmal nutzbar und verfällt nach der Abgabe.',
+      anonTitle: 'Teilnahme ohne Anmeldung',
+      anon:
+        'Über die direkte Umfrage-URL mit Token können Nutzer ohne Anmeldung teilnehmen. Alle anderen Seiten erfordern weiterhin eine Anmeldung.',
+    },
   },
   misc: {
     maxTeams: 'Max 3 Teams.',
@@ -375,6 +389,20 @@ const en = {
       'Select up to 3 teams, compare them in the radar chart, and click a badge for details.',
     tip: 'Tip',
     step3: 'Use Ctrl/Cmd or Shift to select multiple teams.',
+    guide: {
+      adminTitle: 'Admin',
+      admin:
+        'Visible only to users with the Admin role. On the admin page you can create/manage teams and assign team leaders.',
+      leaderTitle: 'Team lead',
+      leader:
+        'Team leads can create surveys for a team. When a survey is created, one token per team member is generated automatically (e.g. 5 members → 5 tokens).',
+      memberTitle: 'Team members',
+      member:
+        'Open “My tokens”, pick an open token, and start the survey — or use the invite link via email. Each token is single-use and expires after submission.',
+      anonTitle: 'Participation without login',
+      anon:
+        'Using the direct survey URL containing the token, users can participate without signing in. All other pages still require a login.',
+    },
   },
   misc: {
     maxTeams: 'Max 3 Teams.',
