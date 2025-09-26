@@ -1,6 +1,7 @@
 // src/store.ts
 import { reactive } from 'vue'
 import { Api, useAuthToken } from '@/api/client'
+import { abortGroup } from '@/api/client' // << NEU: zum gezielten Abbrechen
 import { i18n } from '@/i18n'
 import type {
   SurveyDto,
@@ -16,9 +17,33 @@ function uuid() {
 }
 const $t = (k: string) => (i18n.global as any).t(k) as string
 
+// ---- Helper: "latest wins" pro Bereich ----
+const latestRun: Record<string, string> = {}
+function newRun(key: string) {
+  const id = uuid()
+  latestRun[key] = id
+  return id
+}
+function isStale(key: string, id: string) {
+  return latestRun[key] !== id
+}
+function isCanceledError(e: any) {
+  const msg = String(e?.message || '').toLowerCase()
+  return (
+    e?.code === 'ERR_CANCELED' ||
+    msg.includes('abort') ||
+    msg.includes('canceled')
+  )
+}
+
 interface State {
   token: string
-  user: { email: string; roles: string[], id?: string, isLeader?: boolean } | null
+  user: {
+    email: string
+    roles: string[]
+    id?: string
+    isLeader?: boolean
+  } | null
   toasts: ToastType[]
   loading: boolean
   error: string
@@ -151,6 +176,14 @@ export const useStore = (): StoreApi => {
     toast($t('auth.check_mail'))
   }
   async function logout() {
+    // laufende Gruppen abbrechen, um Race-Conditions nach Logout zu vermeiden
+    try {
+      abortGroup('survey')
+      abortGroup('me/teams')
+      abortGroup('me/surveys')
+      abortGroup('my/tokens')
+      abortGroup('admin/teams')
+    } catch {}
     await Api.logout()
     state.user = null
     state.token = ''
@@ -166,18 +199,27 @@ export const useStore = (): StoreApi => {
 
   // --- Survey (public) ---
   async function loadSurvey(surveyId: string) {
+    // "latest wins" + evtl. vorherige Requests hart abbrechen
+    const run = newRun('survey')
+    abortGroup('survey')
+
     state.currentSurvey = null
     state.surveyLoading = true
     state.surveyError = ''
     try {
-      state.currentSurvey = await Api.getSurvey(surveyId)
+      const dto = await Api.getSurvey(surveyId)
+      if (isStale('survey', run)) return // spätes Ergebnis ignorieren
+      state.currentSurvey = dto
     } catch (e: any) {
+      if (isCanceledError(e)) return // Abbruch nicht als Fehler zeigen
+      if (isStale('survey', run)) return
       state.surveyError = e?.message || String(e)
       throw e
     } finally {
-      state.surveyLoading = false
+      if (!isStale('survey', run)) state.surveyLoading = false
     }
   }
+
   async function submitSurvey(
     surveyId: string,
     body: {
@@ -193,35 +235,47 @@ export const useStore = (): StoreApi => {
     state.lastSubmittedSurveyId = surveyId
     toast($t('survey.thanks') || 'Danke für die Teilnahme!')
   }
+
   async function loadSurveyResults(surveyId: string) {
+    const run = newRun('results')
     state.resultsLoading = true
     state.resultsError = ''
     try {
-      state.results = await Api.getSurveyResults(surveyId)
-      return state.results
+      const r = await Api.getSurveyResults(surveyId)
+      if (isStale('results', run)) return state.results
+      state.results = r
+      return r
     } catch (e: any) {
+      if (isCanceledError(e)) return state.results
+      if (isStale('results', run)) return state.results
       state.resultsError = e?.message || String(e)
       throw e
     } finally {
-      state.resultsLoading = false
+      if (!isStale('results', run)) state.resultsLoading = false
     }
   }
 
   // --- Leader ---
   async function loadMyTeams() {
+    const run = newRun('me/teams')
     state.leaderLoading = true
     state.leaderError = ''
     try {
       if (!isLoggedIn()) return ((state.myTeams = []), [])
-      state.myTeams = await Api.myTeams()
-      return state.myTeams
+      const teams = await Api.myTeams()
+      if (isStale('me/teams', run)) return state.myTeams
+      state.myTeams = teams
+      return teams
     } catch (e: any) {
+      if (isCanceledError(e)) return state.myTeams
+      if (isStale('me/teams', run)) return state.myTeams
       state.leaderError = e?.message || String(e)
       throw e
     } finally {
-      state.leaderLoading = false
+      if (!isStale('me/teams', run)) state.leaderLoading = false
     }
   }
+
   async function createSurvey(payload: CreateSurveyRequest) {
     state.leaderLoading = true
     state.leaderError = ''
@@ -237,6 +291,7 @@ export const useStore = (): StoreApi => {
       state.leaderLoading = false
     }
   }
+
   async function issueTokens(surveyId: string, count: number) {
     state.leaderLoading = true
     state.leaderError = ''
@@ -250,24 +305,31 @@ export const useStore = (): StoreApi => {
       state.leaderLoading = false
     }
   }
+
   function inviteLinkFor(token: string) {
     return Api.buildSurveyInviteLink(state.lastCreatedSurveyId, token)
   }
 
   // --- Admin ---
   async function loadTeamsAdmin() {
+    const run = newRun('admin/teams')
     state.adminLoading = true
     state.adminError = ''
     try {
-      state.teamsAdmin = await Api.listTeamsAdmin()
-      return state.teamsAdmin
+      const teams = await Api.listTeamsAdmin()
+      if (isStale('admin/teams', run)) return state.teamsAdmin
+      state.teamsAdmin = teams
+      return teams
     } catch (e: any) {
+      if (isCanceledError(e)) return state.teamsAdmin
+      if (isStale('admin/teams', run)) return state.teamsAdmin
       state.adminError = e?.message || String(e)
       throw e
     } finally {
-      state.adminLoading = false
+      if (!isStale('admin/teams', run)) state.adminLoading = false
     }
   }
+
   async function createTeamAdmin(name: string, leaderUserId: string) {
     await Api.createTeamAdmin(name, leaderUserId)
     toast($t('team.created') || 'Team erstellt.')
@@ -324,6 +386,6 @@ export const useStore = (): StoreApi => {
     removeMemberAdmin,
     // ui
     toast,
-    dismiss, // <— EXPLIZIT im Typ & im Return
+    dismiss,
   }
 }

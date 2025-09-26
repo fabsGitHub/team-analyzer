@@ -64,7 +64,7 @@ const routes = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-const PUBLIC_PATHS = new Set<string>(['/auth', '/verify'])
+const PUBLIC_PATHS = new Set<string>(['/auth', '/verify', '/surveys/:id'])
 
 // kleine Helfer – NUR Rollen verwenden
 function hasRole(user: any, role: 'admin' | 'leader') {

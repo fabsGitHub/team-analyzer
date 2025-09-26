@@ -51,12 +51,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Api } from "@/api/client";
 import type { SurveyDto } from "@/types";
 import LikertScale from "@/components/LikertScale.vue";
 import { useI18n } from 'vue-i18n'
+import { onBeforeRouteLeave } from 'vue-router'
+import { abortGroup } from '@/api/client'
+
+onBeforeRouteLeave(() => abortGroup('survey'))
+onUnmounted(() => abortGroup('survey'))
 
 const { t } = useI18n()
 const route = useRoute();
