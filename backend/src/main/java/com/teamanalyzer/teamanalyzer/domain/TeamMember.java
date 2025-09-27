@@ -16,10 +16,8 @@ import lombok.*;
 public class TeamMember {
 
     @EmbeddedId
-    @AttributeOverrides({
-            @AttributeOverride(name = "teamId", column = @Column(name = "team_id", nullable = false, columnDefinition = "BINARY(16)")),
-            @AttributeOverride(name = "userId", column = @Column(name = "user_id", nullable = false, columnDefinition = "BINARY(16)"))
-    })
+    @AttributeOverride(name = "teamId", column = @Column(name = "team_id", nullable = false, columnDefinition = "BINARY(16)"))
+    @AttributeOverride(name = "userId", column = @Column(name = "user_id", nullable = false, columnDefinition = "BINARY(16)"))
     @Builder.Default
     private TeamMemberKey id = new TeamMemberKey(); // <- niemals null lassen
 

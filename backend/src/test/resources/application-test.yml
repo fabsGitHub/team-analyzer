@@ -1,0 +1,56 @@
+spring:
+  datasource:
+    url: jdbc:tc:mysql:8.4.6:///teambase
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate.format_sql: true
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    locations: classpath:db/migration,classpath:db/seed
+    clean-disabled: false
+    validate-migration-naming: true
+
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: no-reply@example.com
+    password: "secret"
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+server:
+  port: 8080
+
+app:
+  frontend-base-url: "http://localhost:5173"
+  verify-endpoint-path: "/verify"
+
+  download-token-secret: "KeTSFtbwJcO8BLj2NhUFEQUkMwIFHQLYaXAaZVQqoK0="
+
+  # aus dem Dokument
+  auth:
+    issuer: "test-issuer"
+    email-verify-exp-min: 60
+    hmac-secret: "7aebe9e46ded497f9821b87f3d92e913650212fed2c527c2eca8ceb445db7812"
+
+  # zusätzliche Testwerte
+  hmac-secret: "7aebe9e46ded497f9821b87f3d92e913650212fed2c527c2eca8ceb445db7812"
+
+  jwt:
+    secret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    expiration: 3600000
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    com.teamanalyzer: DEBUG

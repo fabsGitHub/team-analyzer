@@ -13,6 +13,8 @@ import java.util.UUID;
 @Service
 public class PasswordResetService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PasswordResetService.class);
+
     private final UserRepository userRepository;
     private final MailService mailService;
 
@@ -41,8 +43,7 @@ public class PasswordResetService {
         String link = frontendBaseUrl + "/auth/reset?token=" + token;
 
         // DEV: immer loggen, damit man ohne SMTP sofort testen kann
-        System.out.println("DEV: Password reset link for " + email + " -> " + link);
-
+        log.info("DEV: Password reset link for {} -> {}", email, link);
         if (mailEnabled) {
             try {
                 String subject = "Password Reset for Team Analyzer";

@@ -3,7 +3,6 @@ package com.teamanalyzer.teamanalyzer.filter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -17,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
 import com.teamanalyzer.teamanalyzer.service.JwtService;
 
@@ -32,12 +32,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtService jwt;
     @SuppressWarnings("unused")
     private final UserDetailsService uds;
-
-    private static final Set<String> AUTH_PATHS = Set.of(
-            "/api/auth/register",
-            "/api/auth/login",
-            "/api/auth/verify",
-            "/api/auth/refresh");
 
     public JwtAuthFilter(JwtService jwt, UserDetailsService uds) {
         this.jwt = jwt;
@@ -57,37 +51,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = auth.substring(7).trim();
 
         try {
-            var claims = jwt.validate(token);
+            JWTClaimsSet claims = jwt.validate(token);
 
-            // Email (subject=email; Fallback auf "email"-Claim)
-            String email = claims.getSubject();
-            if (email == null || email.isBlank()) {
-                try {
-                    email = claims.getStringClaim("email");
-                } catch (Exception ignored) {
-                }
-            }
+            // Email aus Subject; Fallback auf "email"-Claim
+            String email = extractEmail(claims);
 
             // userId aus Claim "uid" robust lesen
-            String uidStr = null;
-            try {
-                uidStr = claims.getStringClaim("uid");
-            } catch (Exception ignored) {
-                Object v = claims.getClaim("uid");
-                if (v != null)
-                    uidStr = String.valueOf(v);
-            }
-            UUID userId = null;
-            try {
-                userId = UUID.fromString(uidStr);
-            } catch (Exception ignored) {
-            }
+            UUID userId = toUuidOrNull(extractUidString(claims));
 
             // Rollen als Strings aus dem Token
-            @SuppressWarnings("unchecked")
-            var roleList = (List<String>) claims.getClaim("roles");
-            if (roleList == null)
-                roleList = List.of();
+            List<String> roleList = extractRoles(claims);
 
             // Authorities daraus ableiten
             var authorities = roleList.stream()
@@ -103,9 +76,61 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         } catch (Exception ex) {
             log.debug("JWT invalid: {} ({})", ex.getMessage(), req.getRequestURI());
-            // ungültiges Token -> keine Auth; geschützte Endpunkte liefern dann 401
+            // Ungültiges Token -> keine Auth; geschützte Endpunkte liefern dann 401
         }
 
         chain.doFilter(req, res);
+    }
+
+    /**
+     * Email bevorzugt aus dem Subject lesen; falls leer/fehlend,
+     * auf den String-Claim "email" zurückfallen.
+     * Manche IdPs setzen "email" nicht oder in anderem Typ.
+     */
+    private String extractEmail(JWTClaimsSet claims) {
+        String email = claims.getSubject();
+        if (email == null || email.isBlank()) {
+            try {
+                email = claims.getStringClaim("email");
+            } catch (Exception e) {
+                // Claim fehlt oder hat falschen Typ -> email bleibt null
+            }
+        }
+        return email;
+    }
+
+    /**
+     * Versucht "uid" als String-Claim zu lesen; wenn der Claim kein String ist,
+     * wird ein generischer Claim geholt und in String konvertiert.
+     */
+    private String extractUidString(JWTClaimsSet claims) {
+        try {
+            return claims.getStringClaim("uid");
+        } catch (Exception e) {
+            Object v = claims.getClaim("uid");
+            return v != null ? String.valueOf(v) : null;
+        }
+    }
+
+    /**
+     * Parsed eine UUID sicher; bei Fehlern wird null zurückgegeben.
+     */
+    private UUID toUuidOrNull(String uidStr) {
+        try {
+            return uidStr != null ? UUID.fromString(uidStr) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Liest die Rollenliste; akzeptiert List<?> und konvertiert zu List<String>.
+     */
+    private List<String> extractRoles(JWTClaimsSet claims) {
+        Object raw = claims.getClaim("roles");
+        if (raw instanceof List<?>) {
+            return ((List<?>) raw).stream().map(String::valueOf).toList();
+        }
+        return List.of();
     }
 }

@@ -35,11 +35,6 @@ public class User {
     @Column(name = "email", nullable = false, length = 254, unique = true)
     private String email;
 
-    // Optional robust: zusätzlich normalisierte Spalte mit Unique-Index
-    // @Column(name = "email_normalized", nullable = false, length = 254, unique =
-    // true)
-    // private String emailNormalized;
-
     @ToString.Exclude
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash; // z.B. bcrypt ~60, Reserve für künftige Algorithmen
@@ -85,7 +80,6 @@ public class User {
     private void normalize() {
         if (email != null)
             email = email.trim().toLowerCase(Locale.ROOT);
-        // if (email != null) emailNormalized = email.trim().toLowerCase(Locale.ROOT);
     }
 
     @Override

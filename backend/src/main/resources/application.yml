@@ -1,18 +1,16 @@
 spring:
   profiles:
-    active: dev # standardmäßig Dev-Profil aktiv
+    active: mysql
   jpa:
-    open-in-view: false # aus deiner ersten Datei
+    open-in-view: false
     hibernate:
-      ddl-auto: validate # Schema über Flyway
-    show-sql: true # nur Default; in Prod unten aus
+      ddl-auto: validate
+    show-sql: true
     properties:
       hibernate.format_sql: true
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
-    locations: classpath:db/migration # wird in Profilen überschrieben
-    validate-on-migrate: true
     baseline-on-migrate: false
   mail:
     host: smtp.example.com
@@ -35,58 +33,35 @@ app:
   verify-endpoint-path: "/verify"
   download-token-secret: "${DOWNLOAD_TOKEN_HMAC_SECRET}"
   jwt:
-    secret: ${APP_JWT_SECRET_BASE64} # aus deiner ersten Datei
+    secret: ${APP_JWT_SECRET_BASE64}
 
----
-spring:
-  config:
-    activate:
-      on-profile: dev
-  datasource:
-    url: jdbc:h2:mem:teambase;DB_CLOSE_DELAY=-1;MODE=MySQL
-    driverClassName: org.h2.Driver
-    username: sa
-    password:
-  h2:
-    console:
-      enabled: true # H2 Console im Dev
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: true
-  flyway:
-    # Dialekt-spezifische Migrationen + optionale Seeds nur im Dev
-    locations: classpath:db/migration/h2,classpath:db/seed
-    clean-disabled: false
----
-spring:
-  config:
-    activate:
-      on-profile: prod
-  datasource:
-    # Lokale/klassische Prod-DB (Host nach Bedarf anpassen)
-    url: jdbc:mysql://localhost:3306/teambase?useSSL=true&serverTimezone=UTC
-    username: ${MYSQL_USER}
-    password: ${MYSQL_PASSWORD}
-    driverClassName: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: validate # in Prod niemals 'update'
-    show-sql: false
-  flyway:
-    locations: classpath:db/migration/mysql
-    clean-disabled: true
-    validate-migration-naming: true
 ---
 spring:
   config:
     activate:
       on-profile: mysql
   datasource:
-    # Compose-Setup: Service-Name der DB ist 'db'
-    url: jdbc:mysql://db:3306/teambase?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/teambase?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${MYSQL_USER:teambase}
     password: ${MYSQL_PASSWORD:teambase}
+    driverClassName: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+    clean-disabled: false
+    validate-migration-naming: true
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/teambase?useSSL=true&serverTimezone=UTC
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
     driverClassName: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
