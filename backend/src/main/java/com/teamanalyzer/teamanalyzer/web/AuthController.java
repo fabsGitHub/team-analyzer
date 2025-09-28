@@ -28,7 +28,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 
@@ -93,13 +93,10 @@ public class AuthController {
         if (users.existsByEmail(email))
             return ResponseEntity.status(409).build();
 
-        var u = new User();
-        u.setEmail(email);
-        u.setPasswordHash(enc.encode(dto.password()));
+        var u = User.of(email, enc.encode(dto.password()));
         u.setEnabled(false);
         users.save(u);
 
-        // Verify-Token erzeugen und Link bauen
         String token = emailTokenSvc.create(email);
         String link = frontendBaseUrl + verifyEndpointPath + "?token=" + token;
 
@@ -126,7 +123,6 @@ public class AuthController {
     }
 
     // --- Verify ---
-    // POST – „korrekt“ für API Clients
     @PostMapping("/verify")
     public ResponseEntity<Void> verifyPost(@RequestBody Map<String, String> body) {
         String token = body.get("token");
@@ -152,18 +148,22 @@ public class AuthController {
             HttpServletRequest req,
             HttpServletResponse res) {
         String email = dto.email().trim().toLowerCase();
-        var u = users.findByEmailWithRoles(email).orElseThrow(() -> new BadCredentialsException("x"));
-        if (!u.isEnabled() || !enc.matches(dto.password(), u.getPasswordHash()))
+        var user = users.findByEmailWithRoles(email).orElseThrow(() -> new BadCredentialsException("x"));
+        if (!user.isEnabled() || !enc.matches(dto.password(), user.getPasswordHash()))
             throw new BadCredentialsException("x");
 
-        var access = jwt.createAccessToken(u);
+        var access = jwt.createAccessToken(user);
+
+        // Plain refresh token + gehashte, Base64URL-kodierte Speicherung
         var refreshPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
-        var rt = new RefreshToken();
-        rt.setUser(u);
-        rt.setTokenHash(sha256(refreshPlain));
-        rt.setExpiresAt(Instant.now().plus(14, ChronoUnit.DAYS));
-        rt.setUserAgent(req.getHeader("User-Agent"));
-        rt.setIp(req.getRemoteAddr());
+        var refreshHashB64 = sha256Base64Url(refreshPlain);
+
+        var rt = RefreshToken.of(
+                user,
+                refreshHashB64,
+                Instant.now().plus(14, ChronoUnit.DAYS),
+                req.getHeader("User-Agent"),
+                req.getRemoteAddr());
         tokens.save(rt);
 
         res.addHeader(HttpHeaders.SET_COOKIE,
@@ -174,30 +174,33 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<TokenResponse> refresh(@CookieValue("refresh_token") String refresh,
             HttpServletResponse res) {
-        var hash = sha256(refresh);
-        var rt = tokens.findActiveByHashWithUserAndRoles(hash)
+        var hashB64 = sha256Base64Url(refresh);
+
+        RefreshToken rt = tokens.findActiveByHashWithUserAndRoles(hashB64)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
         if (rt.getExpiresAt().isBefore(Instant.now()) || rt.isRevoked())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
-        // rotate:
+        // rotate
         rt.setRevoked(true);
         tokens.save(rt);
 
         var newPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
-        var newRt = new RefreshToken();
-        newRt.setUser(rt.getUser());
-        newRt.setTokenHash(sha256(newPlain));
-        newRt.setExpiresAt(Instant.now().plus(14, ChronoUnit.DAYS));
-        newRt.setUserAgent(rt.getUserAgent());
-        newRt.setIp(rt.getIp());
+        var newHashB64 = sha256Base64Url(newPlain);
+
+        var newRt = RefreshToken.of(
+                rt.getUser(),
+                newHashB64,
+                Instant.now().plus(14, ChronoUnit.DAYS),
+                rt.getUserAgent(),
+                rt.getIp());
         tokens.save(newRt);
 
         var access = jwt.createAccessToken(rt.getUser());
         var cookie = ResponseCookie.from("refresh_token", newPlain)
                 .httpOnly(true)
-                .secure(false)
+                .secure(false) // ggf. mit 'cookieSecure' ersetzen
                 .sameSite("Lax")
                 .path("/api/auth")
                 .maxAge(Duration.ofDays(14))
@@ -211,33 +214,18 @@ public class AuthController {
     public ResponseEntity<Void> logout(@CookieValue("refresh_token") String refresh,
             HttpServletRequest req,
             HttpServletResponse res) {
-        tokens.revokeByHash(sha256(refresh));
+        var hashB64 = sha256Base64Url(refresh);
+        tokens.revokeByHash(hashB64);
         res.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie("", req, 0).toString());
         return ResponseEntity.noContent().build();
     }
 
-    // --- Password Reset: Request Token ---
-    @PostMapping("/reset")
-    public ResponseEntity<?> sendResetToken(@Valid @RequestBody ResetPasswordDto dto) {
-        passwordResetService.sendResetToken(dto.email().trim().toLowerCase());
-        // Immer OK zurückgeben, damit niemand E-Mail-Adressen prüfen kann
-        return ResponseEntity.ok().build();
-    }
-
-    // --- Password Reset: Set New Password ---
-    @PostMapping("/reset/confirm")
-    public ResponseEntity<?> resetPassword(@RequestParam String token, @RequestParam String newPassword) {
-        boolean ok = passwordResetService.resetPassword(token, newPassword);
-        if (!ok) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid or expired token.");
-        }
-        return ResponseEntity.ok().build();
-    }
-
-    private static String sha256(String s) {
+    // SHA-256 -> Base64URL (ohne Padding) als String
+    private static String sha256Base64Url(String s) {
         try {
             var md = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(md.digest(s.getBytes(StandardCharsets.UTF_8)));
+            byte[] digest = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

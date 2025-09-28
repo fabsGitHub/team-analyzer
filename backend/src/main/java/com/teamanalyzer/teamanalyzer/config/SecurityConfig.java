@@ -1,12 +1,14 @@
 // backend/src/main/java/com/teamanalyzer/teamanalyzer/config/SecurityConfig.java
 package com.teamanalyzer.teamanalyzer.config;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
@@ -28,41 +30,75 @@ import com.teamanalyzer.teamanalyzer.filter.JwtAuthFilter;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+  // ---- Single Source of Truth: zentrale Endpunkt-/Rollen-Definitionen ----
+  private static final String ROLE_ADMIN = "ADMIN";
+
+  private static final String[] PUBLIC_ENDPOINTS = {
+      "/error",
+      "/actuator/health",
+      "/api/auth/**"
+  };
+
+  private static final String[] SURVEY_PUBLIC_ENDPOINTS_GET = {
+      "/api/surveys/*",
+      "/api/surveys/*/results/download"
+  };
+
+  private static final String[] SURVEY_PUBLIC_ENDPOINTS_POST = {
+      "/api/surveys/*/responses"
+  };
+
+  private static final String[] ADMIN_ENDPOINTS = {
+      "/api/admin/**"
+  };
+
+  // ---- Konfiguration aus Environment (SSOT, 12-Factor) ----
+  @Value("${app.security.bcrypt-strength:12}")
+  private int bcryptStrength;
+
   @Bean
   PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder(12);
+    // KISS: delegiert nur die Erzeugung, Parametrisierung per Property
+    return new BCryptPasswordEncoder(bcryptStrength);
   }
 
   @Bean
   SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwt) throws Exception {
     http
+        // State & Basis-Setup
         .csrf(AbstractHttpConfigurer::disable)
         .cors(Customizer.withDefaults())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        // wichtig: Standard-Basic-Auth/Form-Login explizit aus
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
+
+        // Autorisierung: klar gruppiert, keine Magic Strings
         .authorizeHttpRequests(auth -> auth
-            // Preflight
+            // Preflight immer erlauben
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
             // offen
-            .requestMatchers("/error", "/actuator/health").permitAll()
-            .requestMatchers("/api/auth/**").permitAll()
+            .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
 
             // öffentliche Survey-Endpunkte
-            .requestMatchers(HttpMethod.GET, "/api/surveys/*").permitAll() // Fragen lesen
-            .requestMatchers(HttpMethod.POST, "/api/surveys/*/responses").permitAll() // Antworten abgeben
-            .requestMatchers(HttpMethod.GET, "/api/surveys/*/results/download").permitAll() // signierter DL-Link
+            .requestMatchers(HttpMethod.GET, SURVEY_PUBLIC_ENDPOINTS_GET).permitAll()
+            .requestMatchers(HttpMethod.POST, SURVEY_PUBLIC_ENDPOINTS_POST).permitAll()
 
-            // Admin
-            .requestMatchers("/api/admin/**").hasRole("ADMIN")
+            // Admin only
+            .requestMatchers(ADMIN_ENDPOINTS).hasRole(ROLE_ADMIN)
 
-            // alles andere → Auth nötig
+            // alles andere erfordert Auth
             .anyRequest().authenticated())
+
+        // JWT vor Username/Passwort-Filter einhängen
         .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class)
+
+        // Einheitliches Fehlerverhalten (keine leeren catches; klare Statuscodes)
         .exceptionHandling(e -> e
-            .authenticationEntryPoint((req, res, ex) -> res.setStatus(HttpStatus.UNAUTHORIZED.value()))
+            .authenticationEntryPoint((req, res, ex) -> {
+              res.setStatus(HttpStatus.UNAUTHORIZED.value());
+              res.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+            })
             .accessDeniedHandler((req, res, ex) -> res.setStatus(HttpStatus.FORBIDDEN.value())));
 
     return http.build();
@@ -71,15 +107,26 @@ public class SecurityConfig {
   @Bean
   CorsConfigurationSource cors(
       @Value("${app.cors.allowed-origins:http://localhost:5173}") String originsCsv) {
-    var cfg = new CorsConfiguration();
-    cfg.setAllowedOrigins(Arrays.stream(originsCsv.split(",")).map(String::trim).toList());
+
+    final List<String> allowedOrigins = Arrays.stream(originsCsv.split(","))
+        .map(String::trim)
+        .filter(s -> !s.isBlank())
+        .toList();
+
+    CorsConfiguration cfg = new CorsConfiguration();
+    cfg.setAllowedOrigins(allowedOrigins);
     cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
+    cfg.setAllowedHeaders(List.of(
+        HttpHeaders.AUTHORIZATION,
+        HttpHeaders.CONTENT_TYPE,
+        "X-Requested-With",
+        HttpHeaders.ACCEPT,
+        HttpHeaders.ORIGIN));
     cfg.setExposedHeaders(List.of("Content-Disposition")); // für Downloads
     cfg.setAllowCredentials(true);
-    cfg.setMaxAge(3600L);
+    cfg.setMaxAge(Duration.ofHours(1).toSeconds()); // lesbarer als nackte Zahl
 
-    var src = new UrlBasedCorsConfigurationSource();
+    UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
     src.registerCorsConfiguration("/**", cfg);
     return src;
   }

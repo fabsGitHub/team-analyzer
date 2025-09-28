@@ -2,13 +2,7 @@ package com.teamanalyzer.teamanalyzer.domain;
 
 import java.time.Instant;
 import java.util.*;
-
 import org.hibernate.annotations.BatchSize;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
-
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -16,19 +10,12 @@ import lombok.*;
 
 @Entity
 @Getter
-@Setter
 @Table(name = "users", indexes = {
         @Index(name = "ix_users_email", columnList = "email", unique = true),
         @Index(name = "ix_users_created_at", columnList = "created_at"),
         @Index(name = "ix_users_reset_token", columnList = "reset_token")
 })
-public class User {
-
-    @Id
-    @Setter(AccessLevel.NONE)
-    @JdbcTypeCode(SqlTypes.BINARY)  
-    @Column(name = "id", nullable = false, updatable = false, columnDefinition = "BINARY(16)")
-    private UUID id = UUID.randomUUID();
+public class User extends UuidEntity {
 
     @Email
     @NotBlank
@@ -37,36 +24,24 @@ public class User {
 
     @ToString.Exclude
     @Column(name = "password_hash", nullable = false, length = 100)
-    private String passwordHash; // z.B. bcrypt ~60, Reserve für künftige Algorithmen
+    private String passwordHash;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)
-    private Set<RefreshToken> refreshTokens = new HashSet<>();
+    private final Set<RefreshToken> refreshTokens = new HashSet<>();
 
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), uniqueConstraints = @UniqueConstraint(columnNames = {
             "user_id", "role" }))
     @Column(name = "role", nullable = false, length = 64)
     @Enumerated(EnumType.STRING)
-    private Set<Role> roles = new HashSet<>(Set.of(Role.USER));
+    private final Set<Role> roles = new HashSet<>(Set.of(Role.USER));
 
     @Column(name = "enabled", nullable = false)
-    private boolean enabled = false; // nach E-Mail-Verify true
+    private boolean enabled = false;
 
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false, nullable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @Version
-    @Column(name = "version", nullable = false)
-    private long version;
 
     // --- Password Reset ---
     @Column(name = "reset_token", length = 100, unique = true)
@@ -75,25 +50,92 @@ public class User {
     @Column(name = "reset_token_created")
     private Instant resetTokenCreated;
 
+    protected User() {
+        /* for JPA */ }
+
+    private User(String email, String passwordHash) { // ← ctor bleibt package/private
+        this.email = normalizeEmail(email);
+        this.passwordHash = passwordHash;
+    }
+
+    /**
+     * Convenience-Factory: erstellt einen normalisierten User mit bereits gehashtem
+     * Passwort.
+     */
+    public static User of(String email, String passwordHash) {
+        return new User(email, passwordHash);
+    }
+
+    // Intention-revealing Helpers
+    public void verifyEmailNow() {
+        this.enabled = true;
+        this.emailVerifiedAt = Instant.now();
+    }
+
+    public void setResetToken(String token, Instant created) {
+        this.resetToken = token;
+        this.resetTokenCreated = created;
+    }
+
+    public void clearResetToken() {
+        this.resetToken = null;
+        this.resetTokenCreated = null;
+    }
+
+    public void addRefreshToken(RefreshToken token) {
+        refreshTokens.add(token);
+        token.setUser(this);
+    }
+
+    public void removeRefreshToken(RefreshToken token) {
+        refreshTokens.remove(token);
+        token.setUser(null);
+    }
+
     @PrePersist
     @PreUpdate
-    private void normalize() {
+    void normalize() {
         if (email != null)
-            email = email.trim().toLowerCase(Locale.ROOT);
+            email = normalizeEmail(email);
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || org.hibernate.Hibernate.getClass(this) != org.hibernate.Hibernate.getClass(o))
-            return false;
-        User other = (User) o;
-        return id != null && id.equals(other.id);
+    private static String normalizeEmail(String value) {
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
-    @Override
-    public int hashCode() {
-        return id.hashCode();
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String hash) {
+        this.passwordHash = hash;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setEmailVerifiedAt(Instant at) {
+        this.emailVerifiedAt = at;
+    }
+
+    public void setResetToken(String token) {
+        this.resetToken = token;
+    }
+
+    public void setResetTokenCreated(Instant created) {
+        this.resetTokenCreated = created;
+    }
+
+    public Instant getResetTokenCreated() {
+        return resetTokenCreated;
     }
 }

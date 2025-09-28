@@ -27,7 +27,7 @@ server:
 app:
   auth:
     issuer: "teamanalyzer"
-    email-verify-exp-min: 60
+    email-verify-ttl: 60m
     hmac-secret: "${EMAIL_VERIFY_HMAC_SECRET}"
   frontend-base-url: "http://localhost:5173"
   verify-endpoint-path: "/verify"

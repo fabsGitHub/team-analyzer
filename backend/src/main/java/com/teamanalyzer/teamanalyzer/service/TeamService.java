@@ -1,4 +1,3 @@
-// backend/src/main/java/com/teamanalyzer/teamanalyzer/service/TeamService.java
 package com.teamanalyzer.teamanalyzer.service;
 
 import java.util.UUID;
@@ -6,6 +5,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional; // ⬅ switch to Spring Tx
 
 import com.teamanalyzer.teamanalyzer.domain.Team;
 import com.teamanalyzer.teamanalyzer.domain.TeamMember;
@@ -15,7 +15,6 @@ import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamRepository;
 import com.teamanalyzer.teamanalyzer.repo.UserRepository;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -24,11 +23,11 @@ public class TeamService {
 
     private final TeamRepository teamRepo;
     private final TeamMemberRepository tmRepo;
-    private final UserRepository userRepo; // <— NEU: für user-Reference
+    private final UserRepository userRepo;
 
     @Transactional
     public Team createTeam(String name, UUID leaderUserId) {
-        Team t = new Team();
+        Team t = new Team(name);
         t.setName(name);
         teamRepo.save(t);
         addMember(t.getId(), leaderUserId, true);
@@ -40,12 +39,7 @@ public class TeamService {
         Team team = teamRepo.getReferenceById(teamId);
         User user = userRepo.getReferenceById(userId);
 
-        TeamMember tm = TeamMember.builder()
-                .team(team) // -> füllt id.teamId via @MapsId
-                .user(user) // -> füllt id.userId via @MapsId
-                .leader(leader)
-                .build();
-
+        TeamMember tm = TeamMember.of(team, user, leader);
         tmRepo.save(tm);
     }
 
@@ -85,8 +79,6 @@ public class TeamService {
         tmRepo.deleteById(id);
     }
 
-    // Optionaler Guard, falls du nachträglich prüfen willst (z. B. in anderen
-    // Pfaden)
     @SuppressWarnings("unused")
     private void ensureAtLeastOneLeader(UUID teamId) {
         if (!tmRepo.existsByTeam_IdAndLeaderTrue(teamId)) {

@@ -5,7 +5,7 @@ import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import com.teamanalyzer.teamanalyzer.domain.Auth;
+import com.teamanalyzer.teamanalyzer.domain.AuthProperties;
 
 import org.springframework.stereotype.Service;
 
@@ -19,7 +19,7 @@ public class EmailVerifyTokenService {
   private final String issuer;
   private final long expMinutes;
 
-  public EmailVerifyTokenService(Auth props) {
+  public EmailVerifyTokenService(AuthProperties props) {
     this.secret = props.getHmacSecret().getBytes(StandardCharsets.UTF_8);
     this.issuer = props.getIssuer();
     this.expMinutes = props.getEmailVerifyExpMin();

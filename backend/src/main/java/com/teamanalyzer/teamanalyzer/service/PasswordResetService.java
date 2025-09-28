@@ -1,11 +1,18 @@
+// backend/src/main/java/com/teamanalyzer/teamanalyzer/service/PasswordResetService.java
 package com.teamanalyzer.teamanalyzer.service;
 
 import com.teamanalyzer.teamanalyzer.domain.User;
+import com.teamanalyzer.teamanalyzer.port.AppClock;
+import com.teamanalyzer.teamanalyzer.port.EmailSender;
+import com.teamanalyzer.teamanalyzer.port.PasswordHasher;
 import com.teamanalyzer.teamanalyzer.repo.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,10 +20,12 @@ import java.util.UUID;
 @Service
 public class PasswordResetService {
 
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PasswordResetService.class);
+    private static final Logger log = LoggerFactory.getLogger(PasswordResetService.class);
 
     private final UserRepository userRepository;
-    private final MailService mailService;
+    private final EmailSender emailSender;
+    private final PasswordHasher passwordHasher;
+    private final AppClock clock;
 
     @Value("${app.frontend-base-url:http://localhost:5173}")
     private String frontendBaseUrl;
@@ -24,56 +33,62 @@ public class PasswordResetService {
     @Value("${app.mail.enabled:true}")
     private boolean mailEnabled;
 
-    public PasswordResetService(UserRepository userRepository, MailService mailService) {
+    @Value("${app.password-reset.ttl-hours:1}")
+    private long ttlHours;
+
+    public PasswordResetService(UserRepository userRepository, EmailSender emailSender,
+            PasswordHasher passwordHasher, AppClock clock) {
         this.userRepository = userRepository;
-        this.mailService = mailService;
+        this.emailSender = emailSender;
+        this.passwordHasher = passwordHasher;
+        this.clock = clock;
     }
 
     @Transactional
     public void sendResetToken(String email) {
         Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email);
-        if (userOpt.isEmpty()) return; // silently ignore for privacy
+        if (userOpt.isEmpty())
+            return; // privacy
 
         User user = userOpt.get();
         String token = UUID.randomUUID().toString();
-        user.setResetToken(token);
-        user.setResetTokenCreated(Instant.now());
+        user.setResetToken(token, clock.now());
         userRepository.save(user);
 
         String link = frontendBaseUrl + "/auth/reset?token=" + token;
+        if (log.isDebugEnabled())
+            log.debug("DEV: Password reset link for {} -> {}", email, link);
 
-        // DEV: immer loggen, damit man ohne SMTP sofort testen kann
-        log.info("DEV: Password reset link for {} -> {}", email, link);
         if (mailEnabled) {
-            try {
-                String subject = "Password Reset for Team Analyzer";
-                String body = "Hello,\n\nTo reset your password, click the following link:\n" + link +
-                        "\n\nIf you did not request this, you can ignore this email.";
-                mailService.send(user.getEmail(), subject, body);
-            } catch (Exception ex) {
-                System.out.println("E-Mail-Versand fehlgeschlagen (fahre ohne Mail fort): " + ex.toString());
-            }
+            String subject = "Password Reset for Team Analyzer";
+            String body = "Hello,\n\nTo reset your password, click:\n" + link +
+                    "\n\nIf you did not request this, you can ignore this email.";
+            emailSender.send(user.getEmail(), subject, body);
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public boolean verifyResetToken(String token) {
-        Optional<User> userOpt = userRepository.findByResetToken(token);
-        if (userOpt.isEmpty()) return false;
-        // Optionally: check token age (e.g. valid for 1 hour)
-        return true;
+        var userOpt = userRepository.findByResetToken(token);
+        if (userOpt.isEmpty())
+            return false;
+        var created = userOpt.get().getResetTokenCreated();
+        if (created == null)
+            return false;
+        return !clock.now().isAfter(created.plus(Duration.ofHours(ttlHours)));
     }
 
     @Transactional
     public boolean resetPassword(String token, String newPassword) {
-        Optional<User> userOpt = userRepository.findByResetToken(token);
-        if (userOpt.isEmpty()) return false;
-        User user = userOpt.get();
-        // Passwort hashen! Beispiel mit BCrypt:
-        String hash = org.springframework.security.crypto.bcrypt.BCrypt.hashpw(newPassword, org.springframework.security.crypto.bcrypt.BCrypt.gensalt());
-        user.setPasswordHash(hash);
-        user.setResetToken(null);
-        user.setResetTokenCreated(null);
+        var userOpt = userRepository.findByResetToken(token);
+        if (userOpt.isEmpty())
+            return false;
+        var user = userOpt.get();
+        if (!verifyResetToken(token))
+            return false;
+
+        user.setPasswordHash(passwordHasher.hash(newPassword));
+        user.setResetToken(null, null); // <<<< kombiniert nullen
         userRepository.save(user);
         return true;
     }

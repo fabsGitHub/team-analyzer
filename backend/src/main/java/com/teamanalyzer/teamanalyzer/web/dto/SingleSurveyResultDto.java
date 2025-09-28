@@ -1,11 +1,18 @@
 package com.teamanalyzer.teamanalyzer.web.dto;
 
+import java.util.Map;
+import java.util.UUID;
+
+import com.teamanalyzer.teamanalyzer.domain.SurveyAnswer;
 import com.teamanalyzer.teamanalyzer.domain.SurveyResponse;
 
-public record SingleSurveyResultDto(
-        short q1, short q2, short q3, short q4, short q5
-) {
+public record SingleSurveyResultDto(UUID responseId, Map<UUID, Short> answers) {
     public static SingleSurveyResultDto from(SurveyResponse r) {
-        return new SingleSurveyResultDto(r.getQ1(), r.getQ2(), r.getQ3(), r.getQ4(), r.getQ5());
+        Map<UUID, Short> map = r.getAnswers().stream()
+                .filter(a -> a.getQuestion() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        a -> a.getQuestion().getId(),
+                        SurveyAnswer::getValue));
+        return new SingleSurveyResultDto(r.getId(), map);
     }
 }

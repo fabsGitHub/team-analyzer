@@ -69,9 +69,7 @@ public class TeamAdminController {
 
         var key = new TeamMemberKey(teamId, userId);
         var member = teamMemberRepo.findById(key).orElseGet(() -> {
-            var m = new TeamMember();
-            m.setTeam(team);
-            m.setUser(user);
+            TeamMember m = TeamMember.of(team, user, false);
             return m;
         });
 

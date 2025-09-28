@@ -1,27 +1,72 @@
+// backend/src/main/java/com/teamanalyzer/teamanalyzer/domain/Survey.java
 package com.teamanalyzer.teamanalyzer.domain;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+import java.util.*;
+import jakarta.persistence.*;
 import lombok.Getter;
-import lombok.Setter;
 
 @Entity
 @Getter
-@Setter
 @Table(name = "surveys")
 public class Survey extends UuidEntity {
-    @ManyToOne
+
+    @ManyToOne(optional = false, fetch = FetchType.LAZY)
     private Team team;
-    @Column(columnDefinition = "BINARY(16)")
-    private UUID createdBy; // user.id
+
+    @Column(name = "created_by", columnDefinition = "BINARY(16)", nullable = false)
+    private java.util.UUID createdBy;
+
+    @Column(nullable = false, length = 300)
     private String title;
-    @OneToMany(mappedBy = "survey", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
-    private List<SurveyQuestion> questions = new ArrayList<>();
+
+    @OneToMany(mappedBy = "survey", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("idx ASC")
+    private final List<SurveyQuestion> questions = new ArrayList<>();
+
+    protected Survey() {
+    }
+
+    public Survey(Team team, java.util.UUID createdBy, String title) {
+        this.team = team;
+        this.createdBy = createdBy;
+        this.title = title;
+    }
+
+    public void addQuestion(SurveyQuestion q) {
+        questions.add(q);
+        q.setSurvey(this);
+    }
+
+    public void removeQuestion(SurveyQuestion q) {
+        questions.remove(q);
+        q.setSurvey(null);
+    }
+
+    public static Survey create(Team team, java.util.UUID createdBy, String title) {
+        Survey s = new Survey();
+        s.team = team;
+        s.createdBy = createdBy;
+        s.title = title;
+        return s;
+    }
+
+    // nur ID-Referenz ohne DB-Load
+    public static Survey ref(java.util.UUID id) {
+        Survey s = new Survey();
+        s.setId(id);
+        return s;
+    }
+
+    // gezielte Mutatoren, die Services verwenden
+    public void setTeam(Team team) {
+        this.team = team;
+    }
+
+    public void setCreatedBy(java.util.UUID createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
 }

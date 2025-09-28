@@ -6,36 +6,40 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.teamanalyzer.teamanalyzer.domain.TeamMember;
 import com.teamanalyzer.teamanalyzer.domain.TeamMemberKey;
 
+@Repository
+@Transactional(readOnly = true)
 public interface TeamMemberRepository extends JpaRepository<TeamMember, TeamMemberKey> {
 
-    // Liste aller Mitglieder eines Teams
+    /** Alle Mitglieder eines Teams. */
     List<TeamMember> findByTeam_Id(UUID teamId);
 
-    // Gibt es mind. einen Leader in Team?
+    /** Gibt es Leader in einem Team? */
     boolean existsByTeam_IdAndLeaderTrue(UUID teamId);
 
+    /** Anzahl Leader (z. B. für Invariantenprüfung in der Domäne). */
     long countByTeam_IdAndLeaderTrue(UUID teamId);
 
-    // Mitglied per Team+User
+    /** Mitglied per Team+User. */
     Optional<TeamMember> findByTeam_IdAndUser_Id(UUID teamId, UUID userId);
 
     boolean existsByTeam_IdAndUser_Id(UUID teamId, UUID userId);
 
-    // Ist bestimmtes Mitglied Leader?
+    /** Ist bestimmtes Mitglied Leader? */
     boolean existsByTeam_IdAndUser_IdAndLeaderTrue(UUID teamId, UUID userId);
 
+    /** Hat User irgendwo Leader-Rolle? */
     boolean existsByUser_IdAndLeaderTrue(UUID userId);
 
-    // Entfernen
+    /** Entfernen — Side-Effect, daher explizit @Transactional. */
     @Transactional
     void deleteByTeam_IdAndUser_Id(UUID teamId, UUID userId);
 
     @Transactional
     void deleteByTeam_Id(UUID teamId);
-
 }
