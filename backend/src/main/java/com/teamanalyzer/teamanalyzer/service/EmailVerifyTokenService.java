@@ -25,8 +25,7 @@ public class EmailVerifyTokenService {
     this.expMinutes = props.getEmailVerifyExpMin();
   }
 
-  public String create(String email) {
-    Instant now = Instant.now();
+  public String create(String email, Instant now) {
     Instant exp = now.plusSeconds(expMinutes * 60);
 
     JWTClaimsSet claims = new JWTClaimsSet.Builder()

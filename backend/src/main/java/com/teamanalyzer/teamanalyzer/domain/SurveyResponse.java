@@ -1,6 +1,8 @@
 package com.teamanalyzer.teamanalyzer.domain;
 
 import java.util.*;
+import java.util.function.Function;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 
@@ -23,9 +25,14 @@ public class SurveyResponse extends UuidEntity {
     protected SurveyResponse() {
     }
 
-    public SurveyResponse(Survey survey, SurveyToken token) {
+    private SurveyResponse(Survey survey, SurveyToken token) {
         this.survey = survey;
         this.token = token;
+    }
+
+    public static SurveyResponse create(Survey survey, SurveyToken token) {
+        SurveyResponse sr = new SurveyResponse(survey, token);
+        return sr;
     }
 
     /** Bidirektional verknüpfen */
@@ -98,7 +105,7 @@ public class SurveyResponse extends UuidEntity {
             Survey survey,
             SurveyToken tok,
             Map<UUID, Short> values,
-            java.util.function.Function<UUID, SurveyQuestion> refLoader) {
+            Function<UUID, SurveyQuestion> refLoader) {
         SurveyResponse r = new SurveyResponse(survey, tok);
         values.forEach((qid, val) -> r.putAnswer(refLoader.apply(qid), val));
         return r;

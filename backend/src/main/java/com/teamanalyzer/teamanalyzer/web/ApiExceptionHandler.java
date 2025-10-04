@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -17,24 +18,25 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.net.URI;
-import java.time.Instant;
 import java.util.*;
+
+import com.teamanalyzer.teamanalyzer.port.AppClock;
 
 @RestControllerAdvice
 @Slf4j
+@RequiredArgsConstructor
 public class ApiExceptionHandler {
 
-    /**
-     * Optional: Stacktrace nur in dev anzeigen (application.yml -> app.errors.include-stacktrace: true).
-     */
     @Value("${app.errors.include-stacktrace:false}")
     private boolean includeStacktrace;
 
-    // ---- Helpers -----------------------------------------------------------------------
+    private final AppClock clock; // ⟵ neu: für Timestamp
+
+    // ---- Helpers
+    // -----------------------------------------------------------------------
 
     private URI currentRequestUri(HttpServletRequest req) {
         try {
@@ -45,11 +47,12 @@ public class ApiExceptionHandler {
     }
 
     private ProblemDetail pd(HttpStatus status, String title, String detail, HttpServletRequest req) {
-        ProblemDetail p = ProblemDetail.forStatusAndDetail(status, Optional.ofNullable(detail).orElse(status.getReasonPhrase()));
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(status,
+                Optional.ofNullable(detail).orElse(status.getReasonPhrase()));
         p.setTitle(Optional.ofNullable(title).orElse(status.getReasonPhrase()));
         p.setInstance(currentRequestUri(req));
-        p.setType(URI.create("about:blank")); // Optional: auf eigene Fehler-Doku verlinken
-        p.setProperty("timestamp", Instant.now().toString());
+        p.setType(URI.create("about:blank"));
+        p.setProperty("timestamp", clock.now().toString());
         return p;
     }
 
@@ -59,13 +62,15 @@ public class ApiExceptionHandler {
                 .body(body);
     }
 
-    // ---- Specific handlers --------------------------------------------------------------
+    // ---- Specific handlers
+    // --------------------------------------------------------------
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ProblemDetail> handleRse(ResponseStatusException ex, HttpServletRequest req) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         ProblemDetail body = pd(status, status.getReasonPhrase(), ex.getReason(), req);
-        if (includeStacktrace && status.is5xxServerError()) body.setProperty("exception", ex.toString());
+        if (includeStacktrace && status.is5xxServerError())
+            body.setProperty("exception", ex.toString());
         return respond(status, body);
     }
 
@@ -126,7 +131,7 @@ public class ApiExceptionHandler {
         return respond(status, body);
     }
 
-    @ExceptionHandler({NoSuchElementException.class, EntityNotFoundException.class})
+    @ExceptionHandler({ NoSuchElementException.class, EntityNotFoundException.class })
     public ResponseEntity<ProblemDetail> handleNotFound(RuntimeException ex, HttpServletRequest req) {
         HttpStatus status = HttpStatus.NOT_FOUND;
         ProblemDetail body = pd(status, "Not found", ex.getMessage(), req);
@@ -148,27 +153,31 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<ProblemDetail> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex, HttpServletRequest req) {
+    public ResponseEntity<ProblemDetail> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex,
+            HttpServletRequest req) {
         HttpStatus status = HttpStatus.METHOD_NOT_ALLOWED;
         ProblemDetail body = pd(status, "Method not allowed", ex.getMessage(), req);
         return respond(status, body);
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    public ResponseEntity<ProblemDetail> handleUnsupportedMedia(HttpMediaTypeNotSupportedException ex, HttpServletRequest req) {
+    public ResponseEntity<ProblemDetail> handleUnsupportedMedia(HttpMediaTypeNotSupportedException ex,
+            HttpServletRequest req) {
         HttpStatus status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
         ProblemDetail body = pd(status, "Unsupported media type", ex.getMessage(), req);
         return respond(status, body);
     }
 
-    // ---- Fallback (last resort) ---------------------------------------------------------
+    // ---- Fallback (last resort)
+    // ---------------------------------------------------------
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest req) {
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
         log.error("Unhandled exception at {}: {}", req.getRequestURI(), ex.toString(), ex);
         ProblemDetail body = pd(status, "Internal Server Error", "An unexpected error occurred.", req);
-        if (includeStacktrace) body.setProperty("exception", ex.toString());
+        if (includeStacktrace)
+            body.setProperty("exception", ex.toString());
         return respond(status, body);
     }
 }

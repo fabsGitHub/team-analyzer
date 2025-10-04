@@ -17,6 +17,7 @@ import com.teamanalyzer.teamanalyzer.domain.SurveyQuestion;
 import com.teamanalyzer.teamanalyzer.domain.SurveyResponse;
 import com.teamanalyzer.teamanalyzer.domain.SurveyToken;
 import com.teamanalyzer.teamanalyzer.domain.Team;
+import com.teamanalyzer.teamanalyzer.port.DigestService;
 import com.teamanalyzer.teamanalyzer.repo.SurveyQuestionRepository;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.SurveyResponseRepository;
@@ -35,6 +36,7 @@ public class SurveyService {
     private final SurveyResponseRepository responseRepo;
     private final TeamMemberRepository tmRepo;
     private final TokenService tokenService;
+    private final DigestService digest; // ⟵ neu: für Hash aus Plain-Token
 
     public Survey createSurvey(UUID leaderId, UUID teamId, String title, List<String> qTexts) {
         boolean isLeader = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(teamId, leaderId);
@@ -66,8 +68,21 @@ public class SurveyService {
     }
 
     /**
-     * Neuer, atomarer Submit-Flow: Token wird innerhalb derselben Tx gelockt & erst
-     * nach erfolgreichem Persist als verbraucht markiert.
+     * Neuer, atomarer Submit-Flow (Plain-Token-Eintritt): Plain → SHA-256 → hex →
+     * delegiert.
+     */
+    @Transactional
+    public void submitAnonymousByPlainToken(UUID surveyId, String plainToken, short[] answers) {
+        if (plainToken == null || plainToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing token");
+        }
+        String tokenHashHex = HexFormat.of().formatHex(digest.sha256(plainToken));
+        submitAnonymous(surveyId, tokenHashHex, answers);
+    }
+
+    /**
+     * Token wird in derselben Tx gelockt & erst nach erfolgreichem Persist
+     * verbraucht.
      */
     @Transactional
     public void submitAnonymous(UUID surveyId, String tokenHashHex, short[] answers) {
@@ -86,7 +101,7 @@ public class SurveyService {
 
         // Response + Antworten bauen
         Survey sRef = Survey.ref(surveyId);
-        SurveyResponse r = new SurveyResponse(sRef, tok);
+        SurveyResponse r = SurveyResponse.create(sRef, tok);
 
         // Antworten in stabiler Reihenfolge anfügen (0-basiert)
         for (int i = 0; i < 5; i++) {
@@ -104,14 +119,11 @@ public class SurveyService {
         tokenService.consume(tok);
     }
 
-    /**
-     * Kompatibilitäts-Overload: delegiert auf den neuen Flow, falls der Aufrufer
-     * noch ein SurveyToken-Objekt übergibt.
-     */
+    // ---- Kompatibilitäts-Overloads (kannst du behalten oder später aufräumen)
+    // ----
+
     @Transactional
     public void submitAnonymous(UUID surveyId, SurveyToken tok, short[] answers) {
-        // Delegation über den gespeicherten Hash; alternativ könnte man hier auch
-        // im TokenService eine "acquireById(...)"-Variante verwenden.
         submitAnonymous(surveyId, tok.getTokenHash(), answers);
     }
 
@@ -123,8 +135,6 @@ public class SurveyService {
     @Transactional(readOnly = true)
     public SurveyResultsDto getResults(UUID requesterId, UUID surveyId) {
         List<SurveyResponse> all = responseRepo.findWithAnswersBySurveyId(surveyId);
-
-        // neue Aggregation über SurveyAnswer/Question.idx
         double[] avg = SurveyAnalytics.averages(all);
         int n = all.size();
 

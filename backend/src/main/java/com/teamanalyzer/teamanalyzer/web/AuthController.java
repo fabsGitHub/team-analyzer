@@ -2,6 +2,7 @@ package com.teamanalyzer.teamanalyzer.web;
 
 import com.teamanalyzer.teamanalyzer.domain.RefreshToken;
 import com.teamanalyzer.teamanalyzer.domain.User;
+import com.teamanalyzer.teamanalyzer.port.AppClock;
 import com.teamanalyzer.teamanalyzer.repo.RefreshTokenRepository;
 import com.teamanalyzer.teamanalyzer.repo.UserRepository;
 import com.teamanalyzer.teamanalyzer.service.EmailVerifyTokenService;
@@ -44,6 +45,7 @@ public class AuthController {
     private final EmailVerifyTokenService emailTokenSvc;
     private final MailService mail;
     private final PasswordResetService passwordResetService;
+    private final AppClock clock;
 
     private final String frontendBaseUrl;
     private final String verifyEndpointPath;
@@ -63,7 +65,8 @@ public class AuthController {
             MailService mail,
             PasswordResetService passwordResetService,
             @Value("${app.frontend-base-url}") String frontendBaseUrl,
-            @Value("${app.verify-endpoint-path}") String verifyEndpointPath) {
+            @Value("${app.verify-endpoint-path}") String verifyEndpointPath,
+            AppClock clock) {
         this.users = users;
         this.tokens = tokens;
         this.enc = enc;
@@ -73,6 +76,7 @@ public class AuthController {
         this.passwordResetService = passwordResetService;
         this.frontendBaseUrl = frontendBaseUrl;
         this.verifyEndpointPath = verifyEndpointPath;
+        this.clock = clock;
     }
 
     private ResponseCookie buildRefreshCookie(String value, HttpServletRequest req, long maxAgeSeconds) {
@@ -97,7 +101,7 @@ public class AuthController {
         u.setEnabled(false);
         users.save(u);
 
-        String token = emailTokenSvc.create(email);
+        String token = emailTokenSvc.create(email, clock.now());
         String link = frontendBaseUrl + verifyEndpointPath + "?token=" + token;
 
         log.info("DEV: Verification link for {} -> {}", email, link);
@@ -136,7 +140,7 @@ public class AuthController {
         var user = users.findByEmail(email).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!user.isEnabled()) {
             user.setEnabled(true);
-            user.setEmailVerifiedAt(Instant.now());
+            user.setEmailVerifiedAt(clock.now());
             users.save(user);
         }
         return ResponseEntity.noContent().build();
@@ -158,10 +162,10 @@ public class AuthController {
         var refreshPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         var refreshHashB64 = sha256Base64Url(refreshPlain);
 
-        var rt = RefreshToken.of(
+        var rt = RefreshToken.create(
                 user,
                 refreshHashB64,
-                Instant.now().plus(14, ChronoUnit.DAYS),
+                clock.now().plus(14, ChronoUnit.DAYS),
                 req.getHeader("User-Agent"),
                 req.getRemoteAddr());
         tokens.save(rt);
@@ -179,7 +183,7 @@ public class AuthController {
         RefreshToken rt = tokens.findActiveByHashWithUserAndRoles(hashB64)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
-        if (rt.getExpiresAt().isBefore(Instant.now()) || rt.isRevoked())
+        if (rt.getExpiresAt().isBefore(clock.now()) || rt.isRevoked())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
         // rotate
@@ -189,10 +193,10 @@ public class AuthController {
         var newPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         var newHashB64 = sha256Base64Url(newPlain);
 
-        var newRt = RefreshToken.of(
+        var newRt = RefreshToken.create(
                 rt.getUser(),
                 newHashB64,
-                Instant.now().plus(14, ChronoUnit.DAYS),
+                clock.now().plus(14, ChronoUnit.DAYS),
                 rt.getUserAgent(),
                 rt.getIp());
         tokens.save(newRt);

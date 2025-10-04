@@ -43,13 +43,13 @@ public class SurveyToken extends UuidEntity {
   @Column(name = "revoked_at")
   private Instant revokedAt;
 
-  public void redeemNow() {
+  public void redeemNow(Instant now) {
     this.redeemed = true;
-    this.redeemedAt = Instant.now();
+    this.redeemedAt = now;
   }
 
-  public void revokeNow() {
+  public void revokeNow(Instant now) {
     this.revoked = true;
-    this.revokedAt = Instant.now();
+    this.revokedAt = now;
   }
 }

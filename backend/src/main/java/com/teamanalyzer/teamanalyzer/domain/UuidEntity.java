@@ -4,9 +4,7 @@ package com.teamanalyzer.teamanalyzer.domain;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.Hibernate;
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -18,17 +16,15 @@ import lombok.Setter;
 public abstract class UuidEntity {
 
   @Id
-  @Setter(AccessLevel.PROTECTED) 
+  @Setter(AccessLevel.PROTECTED)
   @JdbcTypeCode(SqlTypes.BINARY)
   @Column(name = "id", nullable = false, updatable = false, columnDefinition = "BINARY(16)")
   private UUID id = UUID.randomUUID();
 
-  @CreationTimestamp
-  @Column(name = "created_at", updatable = false, nullable = false)
+  @Column(name = "created_at", insertable = false, updatable = false, nullable = false)
   private Instant createdAt;
 
-  @UpdateTimestamp
-  @Column(name = "updated_at", nullable = false)
+  @Column(name = "updated_at", updatable = false, insertable = false, nullable = false)
   private Instant updatedAt;
 
   @Version

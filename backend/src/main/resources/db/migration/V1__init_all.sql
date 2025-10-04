@@ -21,8 +21,9 @@ CREATE INDEX ix_users_reset_token ON users (reset_token);
 
 CREATE INDEX ix_users_created_at ON users (created_at);
 
+/* Optional – falls gewünscht zusätzlich zum UNIQUE (MySQL legt für UNIQUE intern bereits einen Index an):
 CREATE INDEX ix_users_email ON users (email);
-
+ */
 CREATE TABLE
   user_roles (
     user_id BINARY(16) NOT NULL,
@@ -47,6 +48,7 @@ CREATE TABLE
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
     CONSTRAINT uq_refresh_token_hash UNIQUE (token_hash),
     CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -79,6 +81,7 @@ CREATE TABLE
     leader BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT pk_team_members PRIMARY KEY (team_id, user_id),
     CONSTRAINT fk_tm_team FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE CASCADE,
     CONSTRAINT fk_tm_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -115,6 +118,10 @@ CREATE TABLE
     survey_id BINARY(16) NOT NULL,
     idx SMALLINT UNSIGNED NOT NULL, -- 1..n
     text VARCHAR(1000) NOT NULL,
+    -- aus späteren Migrationen direkt integriert:
+    created_at DATETIME (6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME (6) NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT pk_survey_questions PRIMARY KEY (id),
     CONSTRAINT uq_sq_idx UNIQUE (survey_id, idx),
     CONSTRAINT fk_sq_survey FOREIGN KEY (survey_id) REFERENCES surveys (id) ON DELETE CASCADE
@@ -135,7 +142,6 @@ CREATE TABLE
     redeemed_at TIMESTAMP NULL,
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
     revoked_at DATETIME (6) NULL,
-    -- (entfernt) expires_at: wird in den Entities nicht mehr benutzt
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     version BIGINT NOT NULL DEFAULT 0,
@@ -180,11 +186,14 @@ CREATE TABLE
     response_id BINARY(16) NOT NULL,
     question_id BINARY(16) NOT NULL,
     value SMALLINT UNSIGNED NOT NULL,
+    -- finaler Zustand direkt in CREATE:
+    answer_order INT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT pk_survey_answers PRIMARY KEY (id),
     CONSTRAINT uq_response_question UNIQUE (response_id, question_id),
+    CONSTRAINT uq_response_answer_order UNIQUE (response_id, answer_order),
     CONSTRAINT fk_sa_response FOREIGN KEY (response_id) REFERENCES survey_responses (id) ON DELETE CASCADE,
     CONSTRAINT fk_sa_question FOREIGN KEY (question_id) REFERENCES survey_questions (id) ON DELETE RESTRICT,
     CONSTRAINT ck_sa_value CHECK (value BETWEEN 1 AND 5)
@@ -205,4 +214,4 @@ FROM
   refresh_tokens
 WHERE
   revoked = FALSE
-  AND expires_at > NOW();
+  AND expires_at > CURRENT_TIMESTAMP();

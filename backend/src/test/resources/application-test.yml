@@ -40,8 +40,11 @@ app:
   # aus dem Dokument
   auth:
     issuer: "test-issuer"
-    email-verify-exp-min: 60
+    email-verify-exp-ttl: 24
     hmac-secret: "7aebe9e46ded497f9821b87f3d92e913650212fed2c527c2eca8ceb445db7812"
+    jwt-access-ttl: 15m
+    jwt-refresh-ttl: 14d
+    verification-base-url: http://localhost
 
   # zusätzliche Testwerte
   hmac-secret: "7aebe9e46ded497f9821b87f3d92e913650212fed2c527c2eca8ceb445db7812"

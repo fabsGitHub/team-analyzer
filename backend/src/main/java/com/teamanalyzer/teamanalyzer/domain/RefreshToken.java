@@ -1,12 +1,10 @@
 package com.teamanalyzer.teamanalyzer.domain;
 
 import java.time.Instant;
-import java.util.UUID;
+import java.util.Base64;
+
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -17,13 +15,7 @@ import lombok.*;
         @Index(name = "ix_rt_revoked_expires", columnList = "revoked, expires_at"),
         @Index(name = "ix_rt_expires_at", columnList = "expires_at")
 })
-public class RefreshToken extends AuditedEntity {
-
-    @Id
-    @Setter(AccessLevel.NONE)
-    @JdbcTypeCode(SqlTypes.BINARY)
-    @Column(name = "id", nullable = false, updatable = false, columnDefinition = "BINARY(16)")
-    private UUID id = UUID.randomUUID();
+public class RefreshToken extends UuidEntity {
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, columnDefinition = "BINARY(16)")
@@ -47,36 +39,8 @@ public class RefreshToken extends AuditedEntity {
     @Column(name = "revoked", nullable = false)
     private boolean revoked = false;
 
-    @CreatedDate
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @LastModifiedDate
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
-    @PrePersist
-    void prePersist() {
-        Instant now = Instant.now();
-        if (createdAt == null)
-            createdAt = now;
-        if (updatedAt == null)
-            updatedAt = now;
-    }
-
-    @PreUpdate
-    void preUpdate() {
-        updatedAt = Instant.now();
-    }
 
     protected RefreshToken() {
-    }
-
-    public RefreshToken(byte[] tokenHash, Instant expiresAt, String userAgent, String ip) {
-        this.tokenHash = tokenHash;
-        this.expiresAt = expiresAt;
-        this.userAgent = userAgent;
-        this.ip = ip;
     }
 
     public boolean isExpired(Instant now) {
@@ -85,25 +49,6 @@ public class RefreshToken extends AuditedEntity {
 
     public void revoke() {
         this.revoked = true;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || org.hibernate.Hibernate.getClass(this) != org.hibernate.Hibernate.getClass(o))
-            return false;
-        RefreshToken other = (RefreshToken) o;
-        return id != null && id.equals(other.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return id.hashCode();
-    }
-
-    public void setUser(User u) {
-        this.user = u;
     }
 
     public void setTokenHash(String h) {
@@ -146,7 +91,7 @@ public class RefreshToken extends AuditedEntity {
         return ip;
     }
 
-    public static RefreshToken of(User u, String hash, Instant exp, String ua, String ip) {
+    public static RefreshToken create(User u, String hash, Instant exp, String ua, String ip) {
         RefreshToken rt = new RefreshToken();
         rt.user = u;
         rt.tokenHash = decodeTokenHash(hash);
@@ -157,6 +102,6 @@ public class RefreshToken extends AuditedEntity {
     }
 
     private static byte[] decodeTokenHash(String h) {
-        return java.util.Base64.getUrlDecoder().decode(h);
+        return Base64.getUrlDecoder().decode(h);
     }
 }

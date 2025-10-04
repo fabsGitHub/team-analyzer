@@ -54,7 +54,7 @@ public class User extends UuidEntity {
         /* for JPA */ }
 
     private User(String email, String passwordHash) { // ← ctor bleibt package/private
-        this.email = normalizeEmail(email);
+        this.email = email;
         this.passwordHash = passwordHash;
     }
 
@@ -67,9 +67,9 @@ public class User extends UuidEntity {
     }
 
     // Intention-revealing Helpers
-    public void verifyEmailNow() {
+    public void verifyEmailNow(Instant now) {
         this.enabled = true;
-        this.emailVerifiedAt = Instant.now();
+        this.emailVerifiedAt = now;
     }
 
     public void setResetToken(String token, Instant created) {

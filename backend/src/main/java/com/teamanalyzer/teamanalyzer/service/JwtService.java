@@ -20,6 +20,7 @@ import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.teamanalyzer.teamanalyzer.domain.User;
+import com.teamanalyzer.teamanalyzer.port.AppClock;
 
 @Component
 public class JwtService {
@@ -29,11 +30,14 @@ public class JwtService {
     private final long ttlMinutes;
     private final JWSAlgorithm alg;
     private final JWSHeader header;
+    private final AppClock clock; // <— FEHLTE
 
     public JwtService(
             @Value("${app.jwt.secret}") String secretBase64,
             @Value("${app.auth.issuer}") String issuer,
-            @Value("${app.jwt.ttl-minutes:60}") long ttlMinutes) {
+            @Value("${app.jwt.ttl-minutes:60}") long ttlMinutes,
+            AppClock clock) {
+
         this.key = Base64.getDecoder().decode(secretBase64 == null ? "" : secretBase64);
         if (this.key.length >= 64) {
             this.alg = JWSAlgorithm.HS512;
@@ -46,27 +50,28 @@ public class JwtService {
         this.header = new JWSHeader(this.alg);
         this.issuer = issuer;
         this.ttlMinutes = ttlMinutes;
+        this.clock = clock; 
     }
 
     public String createAccessToken(User u) {
-        // NOTE: u.getRoles() sollte initialisiert sein (z.B. via EntityGraph)
         List<String> roles = (u.getRoles() == null)
                 ? List.of()
                 : u.getRoles().stream()
                         .map(r -> String.valueOf(r.name()))
                         .collect(Collectors.toList());
 
-        var now = new Date();
-        var exp = Date.from(now.toInstant().plus(ttlMinutes, ChronoUnit.MINUTES));
+        // Konsistent die Clock nutzen (statt new Date()):
+        Instant now = clock.now();
+        Instant expI = now.plus(ttlMinutes, ChronoUnit.MINUTES);
 
         var claims = new JWTClaimsSet.Builder()
                 .issuer(issuer)
-                .subject(u.getEmail())                 // = email
-                .claim("uid", u.getId().toString())    // <-- UserId mitgeben
+                .subject(u.getEmail())
+                .claim("uid", u.getId().toString())
                 .claim("email", u.getEmail())
                 .claim("roles", roles)
-                .issueTime(now)
-                .expirationTime(exp)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(expI))
                 .build();
 
         var jwt = new SignedJWT(header, claims);
@@ -87,9 +92,12 @@ public class JwtService {
             }
             var claims = jwt.getJWTClaimsSet();
             var exp = claims.getExpirationTime();
-            if (exp == null || Instant.now().isAfter(exp.toInstant())) {
+
+            // Clock hier verwenden
+            if (exp == null || clock.now().isAfter(exp.toInstant())) {
                 throw new CredentialsExpiredException("Expired");
             }
+
             return claims;
         } catch (BadCredentialsException | CredentialsExpiredException e) {
             throw e;

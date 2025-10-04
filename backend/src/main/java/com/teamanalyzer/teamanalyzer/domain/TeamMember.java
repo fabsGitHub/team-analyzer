@@ -6,25 +6,29 @@ import lombok.*;
 
 @Entity
 @Getter
-@Setter
-@Table(name = "team_members", uniqueConstraints = @UniqueConstraint(name = "uq_team_member", columnNames = { "team_id",
-        "user_id" }))
+@Table(name = "team_members")
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class TeamMember {
 
     @EmbeddedId
+    @Setter(AccessLevel.NONE)
+    @EqualsAndHashCode.Include
     private TeamMemberKey id = new TeamMemberKey();
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId("teamId")
     @JoinColumn(name = "team_id", nullable = false, columnDefinition = "BINARY(16)")
+    @Setter(AccessLevel.PACKAGE)
     private Team team;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId("userId")
     @JoinColumn(name = "user_id", nullable = false, columnDefinition = "BINARY(16)")
+    @Setter(AccessLevel.PACKAGE)
     private User user;
 
     @Column(nullable = false)
+    @Setter
     private boolean leader = false;
 
     @Column(name = "created_at", updatable = false, insertable = false)
@@ -32,6 +36,10 @@ public class TeamMember {
 
     @Column(name = "updated_at", insertable = false, updatable = false)
     private Instant updatedAt;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     protected TeamMember() {
     }

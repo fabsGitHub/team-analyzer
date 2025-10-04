@@ -18,7 +18,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teamanalyzer.teamanalyzer.domain.Survey;
-import com.teamanalyzer.teamanalyzer.domain.SurveyToken;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
@@ -95,10 +94,10 @@ public class SurveyController {
     if (req.getToken() == null || req.getToken().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing token");
     }
-    SurveyToken tok = tokenService.redeem(id, req.getToken());
-    surveyService.submitAnonymous(
+    // KEIN vorzeitiges redeem(...) mehr!
+    surveyService.submitAnonymousByPlainToken(
         id,
-        tok,
+        req.getToken(),
         new short[] { req.getQ1(), req.getQ2(), req.getQ3(), req.getQ4(), req.getQ5() });
     return ResponseEntity.accepted().build();
   }
@@ -147,9 +146,7 @@ public class SurveyController {
 
     Survey surveyRef = em.getReference(Survey.class, id);
 
-    // idempotent: erzeugt NUR, wenn noch kein aktives Token existiert
     String plain = tokenService.ensurePersonalToken(surveyRef, me.userId(), me.email());
-
     boolean created = (plain != null);
     String inviteLink = (plain != null) ? buildInviteLink(req, id, plain) : null;
 
@@ -175,30 +172,6 @@ public class SurveyController {
     String inviteLink = buildInviteLink(req, id, plain);
     return new MyTokenDto(true, inviteLink);
   }
-
-  /*
-   * @GetMapping("/{id}/results/download-link")
-   * public Map<String, String> makeDownloadLink(@AuthenticationPrincipal AuthUser
-   * me, @PathVariable UUID id,
-   * HttpServletRequest req) {
-   * if (me == null || me.userId() == null)
-   * throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-   * boolean isAdmin = hasRole("ROLE_ADMIN");
-   * boolean isLeaderOfTeam =
-   * surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id,
-   * me.userId());
-   * if (!(isAdmin || isLeaderOfTeam))
-   * throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-   * 
-   * String dl = downloadTokens.issue(id, me.userId(),
-   * java.time.Duration.ofMinutes(5));
-   * String base = (frontendBaseUrl != null && !frontendBaseUrl.isBlank())
-   * ? frontendBaseUrl.replaceAll("/+$", "")
-   * : buildBaseFromRequest(req);
-   * String url = base + "/api/surveys/" + id + "/results/download?dl=" + dl;
-   * return Map.of("url", url);
-   * }
-   */
 
   @PostMapping("/{id}/download-tokens")
   public ResponseEntity<Map<String, String>> createDownloadLink(
@@ -227,7 +200,6 @@ public class SurveyController {
   public ResponseEntity<byte[]> downloadViaToken(@PathVariable UUID id, @RequestParam("dl") String dl)
       throws Exception {
     UUID userId = downloadTokens.verifyAndExtractUser(dl, id);
-    // optional: zusätzliche Berechtigung prüfen (z.B. member/leader/admin):
     boolean allowed = hasRole("ROLE_ADMIN") ||
         surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, userId) ||
         tmRepo.existsByTeam_IdAndUser_Id(

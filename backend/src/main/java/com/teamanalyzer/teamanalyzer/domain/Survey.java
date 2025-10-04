@@ -26,12 +26,6 @@ public class Survey extends UuidEntity {
     protected Survey() {
     }
 
-    public Survey(Team team, java.util.UUID createdBy, String title) {
-        this.team = team;
-        this.createdBy = createdBy;
-        this.title = title;
-    }
-
     public void addQuestion(SurveyQuestion q) {
         questions.add(q);
         q.setSurvey(this);
@@ -42,7 +36,7 @@ public class Survey extends UuidEntity {
         q.setSurvey(null);
     }
 
-    public static Survey create(Team team, java.util.UUID createdBy, String title) {
+    public static Survey create(Team team, UUID createdBy, String title) {
         Survey s = new Survey();
         s.team = team;
         s.createdBy = createdBy;
@@ -51,7 +45,7 @@ public class Survey extends UuidEntity {
     }
 
     // nur ID-Referenz ohne DB-Load
-    public static Survey ref(java.util.UUID id) {
+    public static Survey ref(UUID id) {
         Survey s = new Survey();
         s.setId(id);
         return s;
@@ -62,7 +56,7 @@ public class Survey extends UuidEntity {
         this.team = team;
     }
 
-    public void setCreatedBy(java.util.UUID createdBy) {
+    public void setCreatedBy(UUID createdBy) {
         this.createdBy = createdBy;
     }
 

@@ -18,6 +18,7 @@ import com.teamanalyzer.teamanalyzer.domain.Survey;
 import com.teamanalyzer.teamanalyzer.domain.SurveyResponse;
 import com.teamanalyzer.teamanalyzer.domain.SurveyToken;
 import com.teamanalyzer.teamanalyzer.domain.User;
+import com.teamanalyzer.teamanalyzer.port.AppClock;
 import com.teamanalyzer.teamanalyzer.port.DigestService;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.SurveyTokenRepository;
@@ -37,6 +38,7 @@ public class TokenService {
     private final SurveyTokenRepository tokenRepo;
     private final SurveyRepository surveyRepo;
     private final TeamMemberRepository tmRepo;
+    private final AppClock clock;
 
     @PersistenceContext
     private EntityManager em;
@@ -64,7 +66,7 @@ public class TokenService {
     @Transactional
     public void consume(SurveyToken tok) {
         tok.setRedeemed(true);
-        tok.setRedeemedAt(Instant.now());
+        tok.setRedeemedAt(clock.now());
         tokenRepo.save(tok);
     }
 
@@ -82,7 +84,7 @@ public class TokenService {
         var tok = new SurveyToken();
         tok.setSurvey(survey);
         tok.setTokenHash(hash);
-        tok.setIssuedAt(Instant.now());
+        tok.setIssuedAt(clock.now());
         tok.setIssuedToEmail(email);
         tok.setIssuedToUser(em.getReference(User.class, userId));
         tokenRepo.save(tok);
@@ -147,7 +149,7 @@ public class TokenService {
             throw new ResponseStatusException(HttpStatus.GONE, "Token already used");
 
         tok.setRedeemed(true);
-        tok.setRedeemedAt(Instant.now());
+        tok.setRedeemedAt(clock.now());
         return tokenRepo.save(tok);
     }
 

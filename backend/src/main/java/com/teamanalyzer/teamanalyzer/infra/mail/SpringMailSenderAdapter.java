@@ -9,10 +9,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class SpringMailSenderAdapter implements EmailSender {
   private final JavaMailSender delegate;
-  public SpringMailSenderAdapter(JavaMailSender delegate) { this.delegate = delegate; }
-  @Override public void send(String to, String subject, String text) {
+
+  public SpringMailSenderAdapter(JavaMailSender delegate) {
+    this.delegate = delegate;
+  }
+
+  @Override
+  public void send(String to, String subject, String text) {
     SimpleMailMessage msg = new SimpleMailMessage();
-    msg.setTo(to); msg.setSubject(subject); msg.setText(text);
+    msg.setTo(to);
+    msg.setSubject(subject);
+    msg.setText(text);
     delegate.send(msg);
   }
 }
