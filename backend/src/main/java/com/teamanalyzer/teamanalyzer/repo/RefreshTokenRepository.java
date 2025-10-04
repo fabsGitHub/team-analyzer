@@ -43,8 +43,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
   /** Convenience-Lookup ohne Fetch-Graph; sparsam einsetzen. */
   Optional<RefreshToken> findByTokenHash(byte[] tokenHash);
 
-  // ------------------ String-Wrapper (Base64-URL) für Controller
-  // ------------------
+  // ---------- String-Wrapper (Base64-URL) für Controller ----------
 
   /**
    * Erwartet einen Base64-URL-kodierten SHA-256-Hash (ohne Padding) und

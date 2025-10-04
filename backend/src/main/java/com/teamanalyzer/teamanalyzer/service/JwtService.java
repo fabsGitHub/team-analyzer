@@ -30,7 +30,7 @@ public class JwtService {
     private final long ttlMinutes;
     private final JWSAlgorithm alg;
     private final JWSHeader header;
-    private final AppClock clock; // <— FEHLTE
+    private final AppClock clock; 
 
     public JwtService(
             @Value("${app.jwt.secret}") String secretBase64,
@@ -60,7 +60,6 @@ public class JwtService {
                         .map(r -> String.valueOf(r.name()))
                         .collect(Collectors.toList());
 
-        // Konsistent die Clock nutzen (statt new Date()):
         Instant now = clock.now();
         Instant expI = now.plus(ttlMinutes, ChronoUnit.MINUTES);
 

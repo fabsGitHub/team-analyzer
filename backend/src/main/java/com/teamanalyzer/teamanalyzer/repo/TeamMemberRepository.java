@@ -25,9 +25,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, TeamMemb
     /** Anzahl Leader (z. B. für Invariantenprüfung in der Domäne). */
     long countByTeam_IdAndLeaderTrue(UUID teamId);
 
-    /** Mitglied per Team+User. */
-    Optional<TeamMember> findByTeam_IdAndUser_Id(UUID teamId, UUID userId);
-
     boolean existsByTeam_IdAndUser_Id(UUID teamId, UUID userId);
 
     /** Ist bestimmtes Mitglied Leader? */

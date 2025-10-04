@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -88,7 +87,7 @@ public class PasswordResetService {
             return false;
 
         user.setPasswordHash(passwordHasher.hash(newPassword));
-        user.setResetToken(null, null); // <<<< kombiniert nullen
+        user.setResetToken(null, null);
         userRepository.save(user);
         return true;
     }

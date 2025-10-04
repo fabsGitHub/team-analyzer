@@ -24,9 +24,9 @@ import com.teamanalyzer.teamanalyzer.security.AuthUser;
 import com.teamanalyzer.teamanalyzer.service.DownloadTokenService;
 import com.teamanalyzer.teamanalyzer.service.SurveyService;
 import com.teamanalyzer.teamanalyzer.service.TokenService;
-import com.teamanalyzer.teamanalyzer.web.dto.CreateSurveyRequest;
+import com.teamanalyzer.teamanalyzer.web.dto.CreateSurveyRequestDto;
 import com.teamanalyzer.teamanalyzer.web.dto.MyTokenDto;
-import com.teamanalyzer.teamanalyzer.web.dto.SubmitSurveyRequest;
+import com.teamanalyzer.teamanalyzer.web.dto.SubmitSurveyRequestDto;
 import com.teamanalyzer.teamanalyzer.web.dto.SurveyDto;
 import com.teamanalyzer.teamanalyzer.web.dto.SurveyResultsDto;
 
@@ -44,7 +44,7 @@ public class SurveyController {
   private final TokenService tokenService;
   private final TeamMemberRepository tmRepo;
   private final SurveyRepository surveyRepo;
-  private final DownloadTokenService downloadTokens; // ← NEU
+  private final DownloadTokenService downloadTokens;
   private final ObjectMapper objectMapper;
 
   @PersistenceContext
@@ -62,20 +62,21 @@ public class SurveyController {
   @PostMapping
   public ResponseEntity<SurveyDto> create(
       @AuthenticationPrincipal AuthUser me,
-      @RequestBody @Validated CreateSurveyRequest req) {
-    if (req.getQuestions() == null || req.getQuestions().size() != 5)
+      @RequestBody @Validated CreateSurveyRequestDto req) {
+
+    if (req.questions() == null || req.questions().size() != 5)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Require exactly 5 questions");
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-    if (req.getTeamId() == null)
+    if (req.teamId() == null)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing teamId");
 
     boolean isAdmin = hasRole("ROLE_ADMIN");
-    boolean isLeaderOfTeam = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(req.getTeamId(), me.userId());
+    boolean isLeaderOfTeam = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(req.teamId(), me.userId());
     if (!(isAdmin || isLeaderOfTeam))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You must be leader of the selected team");
 
-    var survey = surveyService.createSurvey(me.userId(), req.getTeamId(), req.getTitle(), req.getQuestions());
+    var survey = surveyService.createSurvey(me.userId(), req.teamId(), req.title(), req.questions());
     var dto = surveyService.getSurvey(survey.getId());
     return ResponseEntity
         .created(URI.create("/api/surveys/" + survey.getId()))
@@ -90,15 +91,14 @@ public class SurveyController {
 
   // --- Antworten abgeben (öffentlich mit One-Time-Token) ---
   @PostMapping("/{id}/responses")
-  public ResponseEntity<Void> submit(@PathVariable UUID id, @RequestBody @Validated SubmitSurveyRequest req) {
-    if (req.getToken() == null || req.getToken().isBlank()) {
+  public ResponseEntity<Void> submit(@PathVariable UUID id, @RequestBody @Validated SubmitSurveyRequestDto req) {
+    if (req.token() == null || req.token().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing token");
     }
-    // KEIN vorzeitiges redeem(...) mehr!
     surveyService.submitAnonymousByPlainToken(
         id,
-        req.getToken(),
-        new short[] { req.getQ1(), req.getQ2(), req.getQ3(), req.getQ4(), req.getQ5() });
+        req.token(),
+        new short[] { req.q1(), req.q2(), req.q3(), req.q4(), req.q5() });
     return ResponseEntity.accepted().build();
   }
 
@@ -112,7 +112,7 @@ public class SurveyController {
     if (!(isAdmin || isLeaderOfTeam)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You must be leader of this survey's team");
     }
-    return surveyService.getResults(me.userId(), id);
+    return surveyService.getResults(id);
   }
 
   // --- Tokens für alle Teammitglieder des Surveys sicherstellen ---
@@ -130,14 +130,14 @@ public class SurveyController {
   }
 
   @PutMapping("/{id}/my-token")
-  public com.teamanalyzer.teamanalyzer.web.dto.MyTokenDto ensureMyToken(
+  public MyTokenDto ensureMyToken(
       @AuthenticationPrincipal AuthUser me,
       @PathVariable UUID id,
       HttpServletRequest req) {
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
-    UUID teamId = surveyRepo.findTeam_IdById(id)
+    UUID teamId = surveyRepo.findTeamIdById(id) // <— umbenannte Repo-Methode
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     boolean isMember = tmRepo.existsByTeam_IdAndUser_Id(teamId, me.userId());
     if (!isMember && !hasRole("ROLE_ADMIN")) {
@@ -150,7 +150,7 @@ public class SurveyController {
     boolean created = (plain != null);
     String inviteLink = (plain != null) ? buildInviteLink(req, id, plain) : null;
 
-    return new com.teamanalyzer.teamanalyzer.web.dto.MyTokenDto(created, inviteLink);
+    return new MyTokenDto(created, inviteLink);
   }
 
   // --- Mitglied fordert bewusst einen neuen (alte werden revoked) ---
@@ -160,7 +160,7 @@ public class SurveyController {
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
-    UUID teamId = surveyRepo.findTeam_IdById(id)
+    UUID teamId = surveyRepo.findTeamIdById(id) // <— umbenannte Repo-Methode
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     boolean isMember = tmRepo.existsByTeam_IdAndUser_Id(teamId, me.userId());
     if (!isMember && !hasRole("ROLE_ADMIN")) {
@@ -203,12 +203,12 @@ public class SurveyController {
     boolean allowed = hasRole("ROLE_ADMIN") ||
         surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, userId) ||
         tmRepo.existsByTeam_IdAndUser_Id(
-            surveyRepo.findTeam_IdById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)),
+            surveyRepo.findTeamIdById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)),
             userId);
     if (!allowed)
       throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 
-    SurveyResultsDto dto = surveyService.getResults(userId, id);
+    SurveyResultsDto dto = surveyService.getResults(id);
     byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(dto);
     return ResponseEntity.ok()
         .header("Content-Disposition", "attachment; filename=\"survey-" + id + "-results.json\"")

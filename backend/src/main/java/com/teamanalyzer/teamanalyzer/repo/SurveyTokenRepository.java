@@ -69,15 +69,6 @@ public interface SurveyTokenRepository extends JpaRepository<SurveyToken, UUID> 
   Optional<SurveyToken> findByTokenHashAndSurvey_Id(byte[] tokenHash, UUID surveyId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("""
-          select t from SurveyToken t
-          where t.survey.id = :surveyId
-            and t.tokenHash = :hash
-            and t.revoked = false
-      """)
-  Optional<SurveyToken> findForUpdate(UUID surveyId, String hash);
-
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
   Optional<SurveyToken> findWithLockByTokenHashAndSurvey_Id(byte[] tokenHash, UUID surveyId);
 
 }

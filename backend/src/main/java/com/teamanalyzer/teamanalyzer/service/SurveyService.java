@@ -1,9 +1,10 @@
 package com.teamanalyzer.teamanalyzer.service;
 
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,31 +32,40 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SurveyService {
 
+    public static final int QUESTION_COUNT = 5;
+
     private final SurveyRepository surveyRepo;
     private final SurveyQuestionRepository questionRepo;
     private final SurveyResponseRepository responseRepo;
     private final TeamMemberRepository tmRepo;
     private final TokenService tokenService;
-    private final DigestService digest; // ⟵ neu: für Hash aus Plain-Token
+    private final DigestService digest;
 
+    @Transactional
     public Survey createSurvey(UUID leaderId, UUID teamId, String title, List<String> qTexts) {
-        boolean isLeader = tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(teamId, leaderId);
-        if (!isLeader) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only team leaders can create surveys");
+        if (!tmRepo.existsByTeam_IdAndUser_IdAndLeaderTrue(teamId, leaderId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "error.surveys.onlyLeader");
+        }
+        if (title == null || title.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.surveys.titleRequired");
+        }
+        if (qTexts == null || qTexts.size() != QUESTION_COUNT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.surveys.exactQuestionCount");
         }
 
-        Team teamRef = Team.ref(teamId);
-        Survey s = Survey.create(teamRef, leaderId, title);
+        var s = Survey.create(Team.ref(teamId), leaderId, title);
         surveyRepo.save(s);
 
-        short idx = 1;
-        for (String text : qTexts) {
-            SurveyQuestion q = new SurveyQuestion();
-            q.setSurvey(s);
-            q.setIdx(idx++);
-            q.setText(text);
-            questionRepo.save(q);
-        }
+        List<SurveyQuestion> questions = IntStream.range(0, QUESTION_COUNT)
+                .mapToObj(i -> {
+                    var q = new SurveyQuestion();
+                    q.setSurvey(s);
+                    q.setIdx((short) (i + 1));
+                    q.setText(qTexts.get(i));
+                    return q;
+                }).toList();
+
+        questionRepo.saveAll(questions);
         return s;
     }
 
@@ -67,10 +77,7 @@ public class SurveyService {
         return SurveyDto.from(s, qs);
     }
 
-    /**
-     * Neuer, atomarer Submit-Flow (Plain-Token-Eintritt): Plain → SHA-256 → hex →
-     * delegiert.
-     */
+    /** Plain → SHA-256 → hex → delegiert. */
     @Transactional
     public void submitAnonymousByPlainToken(UUID surveyId, String plainToken, short[] answers) {
         if (plainToken == null || plainToken.isBlank()) {
@@ -86,42 +93,35 @@ public class SurveyService {
      */
     @Transactional
     public void submitAnonymous(UUID surveyId, String tokenHashHex, short[] answers) {
-        if (answers == null || answers.length != 5) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Require 5 answers");
+        if (answers == null || answers.length != QUESTION_COUNT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.surveys.answerCount");
+        }
+        short[] safe = answers.clone();
+        for (int i = 0; i < QUESTION_COUNT; i++) {
+            if (safe[i] < 1 || safe[i] > 5) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.surveys.answerRange");
+            }
         }
 
-        // Token validieren + PESSIMISTIC_WRITE sperren (nicht als redeemed markieren!)
-        SurveyToken tok = tokenService.acquireForSubmission(surveyId, tokenHashHex);
-
-        // Fragen (1..5) holen
-        List<SurveyQuestion> qs = questionRepo.findBySurveyIdOrderByIdx(surveyId);
-        if (qs.size() < 5) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Survey must contain 5 questions");
+        var tok = tokenService.acquireForSubmission(surveyId, tokenHashHex);
+        var qs = questionRepo.findBySurveyIdOrderByIdx(surveyId);
+        if (qs.size() != QUESTION_COUNT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "error.surveys.missingQuestions");
         }
 
-        // Response + Antworten bauen
-        Survey sRef = Survey.ref(surveyId);
-        SurveyResponse r = SurveyResponse.create(sRef, tok);
-
-        // Antworten in stabiler Reihenfolge anfügen (0-basiert)
-        for (int i = 0; i < 5; i++) {
-            SurveyAnswer a = new SurveyAnswer();
+        var r = SurveyResponse.create(Survey.ref(surveyId), tok);
+        for (int i = 0; i < QUESTION_COUNT; i++) {
+            var a = new SurveyAnswer();
             a.setQuestion(qs.get(i));
-            a.setValue(answers[i]); // Likert-Wert
-            a.setAnswerOrder(i); // korrespondiert mit @OrderColumn(answer_order)
+            a.setValue(safe[i]); // Likert-Wert
+            a.setAnswerOrder(i); // 0..4
             r.addAnswer(a);
         }
-
-        // persist (kaskadiert answers)
         responseRepo.save(r);
-
-        // Token erst NACH erfolgreichem Persist verbrauchen (gleiche Tx)
         tokenService.consume(tok);
     }
 
-    // ---- Kompatibilitäts-Overloads (kannst du behalten oder später aufräumen)
-    // ----
-
+    // Kompatibilitäts-Overloads
     @Transactional
     public void submitAnonymous(UUID surveyId, SurveyToken tok, short[] answers) {
         submitAnonymous(surveyId, tok.getTokenHash(), answers);
@@ -133,8 +133,8 @@ public class SurveyService {
     }
 
     @Transactional(readOnly = true)
-    public SurveyResultsDto getResults(UUID requesterId, UUID surveyId) {
-        List<SurveyResponse> all = responseRepo.findWithAnswersBySurveyId(surveyId);
+    public SurveyResultsDto getResults(UUID surveyId) {
+        List<SurveyResponse> all = responseRepo.findBySurveyId(surveyId);
         double[] avg = SurveyAnalytics.averages(all);
         int n = all.size();
 

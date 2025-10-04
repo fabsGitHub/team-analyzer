@@ -21,7 +21,7 @@ public interface SurveyRepository extends JpaRepository<Survey, UUID> {
    * Scoping nach Team: schützt gegen versehentliche Querzugriffe (Bounded
    * Context).
    */
-  Optional<Survey> findByIdAndTeamId(UUID id, UUID teamId);
+  Optional<Survey> findByIdAndTeamId(UUID surveyId, UUID teamId);
 
   /**
    * Existenzprüfungen für Zugriffsentscheidungen in der Service-Schicht.
@@ -47,16 +47,16 @@ public interface SurveyRepository extends JpaRepository<Survey, UUID> {
   /**
    * Leichte, performante Projektion: nur Team-ID eines Surveys.
    */
-  @Query("select s.team.id from Survey s where s.id = :id")
-  Optional<UUID> findTeam_IdById(UUID id);
+  @Query("select s.team.id from Survey s where s.id = :surveyId")
+  Optional<UUID> findTeamIdById(UUID surveyId);
 
   @Query("""
         select distinct s
           from Survey s
           join fetch s.team t
           left join fetch s.questions q
-         where s.createdBy = :uid
+         where s.createdBy = :createdBy
          order by s.id desc
       """)
-  List<Survey> findByCreatedByWithTeamAndQuestions(UUID uid);
+  List<Survey> findByCreatedByWithTeamAndQuestions(UUID createdBy);
 }

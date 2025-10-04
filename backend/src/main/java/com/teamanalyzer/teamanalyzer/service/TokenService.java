@@ -122,7 +122,7 @@ public class TokenService {
 
     @Transactional
     public int ensureTokensForAllTeamMembers(UUID surveyId) {
-        var teamId = surveyRepo.findTeam_IdById(surveyId)
+        var teamId = surveyRepo.findTeamIdById(surveyId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var members = tmRepo.findByTeam_Id(teamId);
         var surveyRef = Survey.ref(surveyId);

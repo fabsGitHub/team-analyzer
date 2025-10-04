@@ -6,28 +6,25 @@ import java.util.UUID;
 import com.teamanalyzer.teamanalyzer.domain.Survey;
 import com.teamanalyzer.teamanalyzer.domain.SurveyQuestion;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
-@Data
-@AllArgsConstructor
-public class SurveyDto {
-    private UUID id;
-    private String title;
-    private UUID createdBy;
-    private String teamName;
-    private List<Question> questions;
-
-    @Data
-    @AllArgsConstructor
-    public static class Question {
-        UUID id;
-        short idx;
-        String text;
+public record SurveyDto(
+        UUID id,
+        String title,
+        UUID createdBy,
+        String teamName,
+        List<QuestionDto> questions) {
+    public static record QuestionDto(UUID id, short idx, String text) {
     }
 
     public static SurveyDto from(Survey s, List<SurveyQuestion> qs) {
-        return new SurveyDto(s.getId(), s.getTitle(), s.getCreatedBy(), s.getTeam().getName(),
-                qs.stream().map(q -> new Question(q.getId(), q.getIdx(), q.getText())).toList());
+        var questions = qs.stream()
+                .map(q -> new QuestionDto(q.getId(), q.getIdx(), q.getText()))
+                .toList();
+
+        return new SurveyDto(
+                s.getId(),
+                s.getTitle(),
+                s.getCreatedBy(),
+                s.getTeam().getName(),
+                questions);
     }
 }

@@ -4,7 +4,6 @@ package com.teamanalyzer.teamanalyzer.repo;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -16,13 +15,6 @@ import com.teamanalyzer.teamanalyzer.domain.SurveyResponse;
 @Transactional(readOnly = true)
 public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, UUID> {
 
-    /**
-     * Responses zu einem Survey. Weitere Filter (User, Zeitfenster) gehören in
-     * eigene Methoden.
-     */
-    @EntityGraph(attributePaths = { "answers", "answers.question" })
-    List<SurveyResponse> findBySurveyId(UUID surveyId);
-
     @Query("""
             select distinct r
             from SurveyResponse r
@@ -30,5 +22,5 @@ public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, 
             left join fetch a.question q
             where r.survey.id = :surveyId
             """)
-    List<SurveyResponse> findWithAnswersBySurveyId(UUID surveyId);
+    List<SurveyResponse> findBySurveyId(UUID surveyId);
 }
