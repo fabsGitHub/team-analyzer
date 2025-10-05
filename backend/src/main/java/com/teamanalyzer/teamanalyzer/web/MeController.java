@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.teamanalyzer.teamanalyzer.security.AuthUser;
+import com.teamanalyzer.teamanalyzer.web.dto.SurveyDto;
 import com.teamanalyzer.teamanalyzer.repo.SurveyRepository;
 import com.teamanalyzer.teamanalyzer.repo.TeamLiteView;
 import com.teamanalyzer.teamanalyzer.repo.TeamMemberRepository;
@@ -20,7 +21,7 @@ import com.teamanalyzer.teamanalyzer.repo.TeamRepository;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/me")
 @RequiredArgsConstructor
 public class MeController {
 
@@ -28,7 +29,7 @@ public class MeController {
     private final TeamRepository teamRepository;
     private final SurveyRepository surveyRepository;
 
-    @GetMapping("/me")
+    @GetMapping()
     public Map<String, Object> me(@AuthenticationPrincipal AuthUser me) {
         if (me == null || me.userId() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
@@ -42,7 +43,7 @@ public class MeController {
                 "isLeader", isLeader);
     }
 
-    @GetMapping("/me/teams")
+    @GetMapping("/teams")
     public List<TeamLiteView> myTeams(@AuthenticationPrincipal AuthUser me,
             @RequestParam(defaultValue = "false") boolean leaderOnly) {
         if (me == null || me.userId() == null) {
@@ -53,15 +54,15 @@ public class MeController {
                 : teamRepository.findDistinctByMembers_User_Id(me.userId());
     }
 
-    @GetMapping("/me/surveys") // (Slash ergänzt, rein der Einheitlichkeit halber)
+    @GetMapping("/surveys")
     @Transactional(readOnly = true)
-    public List<com.teamanalyzer.teamanalyzer.web.dto.SurveyDto> getMySurveys(@AuthenticationPrincipal AuthUser me) {
+    public List<SurveyDto> getMySurveys(@AuthenticationPrincipal AuthUser me) {
         if (me == null || me.userId() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         UUID userId = me.userId();
         return surveyRepository.findByCreatedByWithTeamAndQuestions(userId).stream()
-                .map(s -> com.teamanalyzer.teamanalyzer.web.dto.SurveyDto.from(s, s.getQuestions()))
+                .map(s -> SurveyDto.from(s, s.getQuestions()))
                 .toList();
     }
 }

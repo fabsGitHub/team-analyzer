@@ -137,7 +137,7 @@ public class SurveyController {
     if (me == null || me.userId() == null)
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
-    UUID teamId = surveyRepo.findTeamIdById(id) // <— umbenannte Repo-Methode
+    UUID teamId = surveyRepo.findTeamIdById(id)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     boolean isMember = tmRepo.existsByTeam_IdAndUser_Id(teamId, me.userId());
     if (!isMember && !hasRole("ROLE_ADMIN")) {
@@ -201,10 +201,7 @@ public class SurveyController {
       throws Exception {
     UUID userId = downloadTokens.verifyAndExtractUser(dl, id);
     boolean allowed = hasRole("ROLE_ADMIN") ||
-        surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, userId) ||
-        tmRepo.existsByTeam_IdAndUser_Id(
-            surveyRepo.findTeamIdById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)),
-            userId);
+        surveyRepo.existsByIdAndTeam_Members_User_IdAndTeam_Members_LeaderTrue(id, userId);
     if (!allowed)
       throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 

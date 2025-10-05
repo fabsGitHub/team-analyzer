@@ -22,7 +22,7 @@ import com.teamanalyzer.teamanalyzer.repo.TeamRepository;
 import com.teamanalyzer.teamanalyzer.repo.UserRepository;
 import com.teamanalyzer.teamanalyzer.service.TeamService;
 import com.teamanalyzer.teamanalyzer.web.dto.CreateTeamRequestDto;
-
+import com.teamanalyzer.teamanalyzer.web.dto.TeamAdminDto;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -77,7 +77,6 @@ public class TeamAdminController {
         member.setLeader(body.leader());
         teamMemberRepo.save(member);
 
-        // Rollen-Sync nur, wenn sich etwas ändert oder neu angelegt wurde
         if (prevLeader != body.leader() || member.getCreatedAt() == null) {
             syncLeaderRole(user);
         }
@@ -94,7 +93,6 @@ public class TeamAdminController {
         User user = member.getUser();
         teamMemberRepo.delete(member);
 
-        // Nach dem Entfernen prüfen, ob noch irgendwo Leader/Member -> Rolle anpassen
         syncLeaderRole(user);
     }
 
@@ -112,7 +110,6 @@ public class TeamAdminController {
         m.setLeader(leader);
         teamMemberRepo.save(m);
 
-        // Rolle anhand der *gesamt* Situation des Users synchronisieren
         User user = m.getUser();
         syncLeaderRole(user);
     }
@@ -121,7 +118,7 @@ public class TeamAdminController {
     @Transactional
     public ResponseEntity<Void> deleteTeam(@PathVariable UUID teamId) {
         // Betroffene User vorher sammeln
-        var members = teamMemberRepo.findByTeam_Id(teamId)
+        List<User> members = teamMemberRepo.findByTeam_Id(teamId)
                 .stream().map(TeamMember::getUser).distinct().toList();
 
         teamMemberRepo.deleteByTeam_Id(teamId);
@@ -132,19 +129,6 @@ public class TeamAdminController {
             syncLeaderRole(u);
         }
         return ResponseEntity.noContent().build();
-    }
-
-    // simples DTO (nested)
-    record TeamAdminDto(UUID id, String name, List<Member> members) {
-        record Member(UUID userId, boolean leader) {
-        }
-
-        static TeamAdminDto fromEntity(Team t) {
-            var members = t.getMembers().stream()
-                    .map(m -> new Member(m.getUser().getId(), m.isLeader()))
-                    .toList();
-            return new TeamAdminDto(t.getId(), t.getName(), members);
-        }
     }
 
     private void syncLeaderRole(User user) {

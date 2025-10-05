@@ -51,7 +51,7 @@ public class AuthController {
     private final String frontendBaseUrl;
     private final String verifyEndpointPath;
 
-    @Value("${app.mail.enabled:true}")
+    @Value("${app.mail.enabled:false}")
     private boolean mailEnabled;
 
     @Value("${app.cookies.secure:true}")

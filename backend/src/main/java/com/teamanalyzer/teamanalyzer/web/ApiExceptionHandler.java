@@ -33,10 +33,9 @@ public class ApiExceptionHandler {
     @Value("${app.errors.include-stacktrace:false}")
     private boolean includeStacktrace;
 
-    private final AppClock clock; // ⟵ neu: für Timestamp
+    private final AppClock clock;
 
-    // ---- Helpers
-    // -----------------------------------------------------------------------
+    // ---- Helpers -------------------------------------------------------------
 
     private URI currentRequestUri(HttpServletRequest req) {
         try {
@@ -62,8 +61,7 @@ public class ApiExceptionHandler {
                 .body(body);
     }
 
-    // ---- Specific handlers
-    // --------------------------------------------------------------
+    // ---- Specific handlers-----------------------------------------------------
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ProblemDetail> handleRse(ResponseStatusException ex, HttpServletRequest req) {
@@ -168,8 +166,7 @@ public class ApiExceptionHandler {
         return respond(status, body);
     }
 
-    // ---- Fallback (last resort)
-    // ---------------------------------------------------------
+    // ---- Fallback (last resort)-----------------------------------------------
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest req) {
