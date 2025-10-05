@@ -8,8 +8,8 @@ spring:
       ddl-auto: validate
     show-sql: true
     properties:
-      hibernate.format_sql: true
-      hibernate.jdbc.time_zone: UTC
+      "[hibernate.format_sql]": true
+      "[hibernate.jdbc.time_zone]": UTC
   flyway:
     enabled: true
     baseline-on-migrate: false
@@ -19,8 +19,8 @@ spring:
     username: no-reply@example.com
     password: "secret"
     properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
+      "[mail.smtp.auth]": true
+      "[mail.smtp.starttls.enable]": true
 
 server:
   port: 8080
@@ -43,9 +43,9 @@ app:
 logging:
   level:
     root: INFO
-    com.teamanalyzer: DEBUG
-    org.springframework.security: INFO
-    org.hibernate.SQL: INFO
+    "[com.teamanalyzer]": DEBUG
+    "[org.springframework.security]": INFO
+    "[org.hibernate.SQL]": INFO
 
 ---
 # ---------- mysql profile (docker-compose) ----------
@@ -73,8 +73,8 @@ app:
 
 logging:
   level:
-    com.teamanalyzer: DEBUG
-    org.springframework.security: INFO
+    "[com.teamanalyzer]": DEBUG
+    "[org.springframework.security]": INFO
 
 ---
 # ---------- prod profile ----------
@@ -108,5 +108,5 @@ app:
 logging:
   level:
     root: INFO
-    com.teamanalyzer: INFO
-    org.springframework.security: WARN
+    "[com.teamanalyzer]": INFO
+    "[org.springframework.security]": WARN

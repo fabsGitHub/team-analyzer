@@ -1,9 +1,5 @@
 package com.teamanalyzer.teamanalyzer.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;

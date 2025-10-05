@@ -1,6 +1,5 @@
 package com.teamanalyzer.teamanalyzer.service;
 
-import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
