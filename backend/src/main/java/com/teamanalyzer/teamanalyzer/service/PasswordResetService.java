@@ -29,7 +29,7 @@ public class PasswordResetService {
     @Value("${app.frontend-base-url:http://localhost:5173}")
     private String frontendBaseUrl;
 
-    @Value("${app.mail.enabled:true}")
+    @Value("${app.mail.enabled:false}")
     private boolean mailEnabled;
 
     @Value("${app.password-reset.ttl-hours:1}")

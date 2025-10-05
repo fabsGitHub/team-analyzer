@@ -9,8 +9,11 @@ import com.teamanalyzer.teamanalyzer.service.EmailVerifyTokenService;
 import com.teamanalyzer.teamanalyzer.service.JwtService;
 import com.teamanalyzer.teamanalyzer.service.MailService;
 import com.teamanalyzer.teamanalyzer.service.PasswordResetService;
+import com.teamanalyzer.teamanalyzer.web.dto.ConfirmPasswordDto;
 import com.teamanalyzer.teamanalyzer.web.dto.LoginDto;
 import com.teamanalyzer.teamanalyzer.web.dto.RegisterDto;
+import com.teamanalyzer.teamanalyzer.web.dto.ResetPasswordDto;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -174,40 +177,32 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refresh(@CookieValue("refresh_token") String refresh,
+    public ResponseEntity<TokenResponse> refresh(
+            @CookieValue(value = "refresh_token", required = false) String refresh,
+            HttpServletRequest req,
             HttpServletResponse res) {
+
+        if (refresh == null || refresh.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+
         var hashB64 = sha256Base64Url(refresh);
-
-        RefreshToken rt = tokens.findActiveByHashWithUserAndRoles(hashB64)
+        var rt = tokens.findActiveByHashWithUserAndRoles(hashB64)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-
         if (rt.getExpiresAt().isBefore(clock.now()) || rt.isRevoked())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
 
-        // rotate
         rt.setRevoked(true);
         tokens.save(rt);
 
         var newPlain = UUID.randomUUID().toString() + "." + UUID.randomUUID();
         var newHashB64 = sha256Base64Url(newPlain);
-
-        var newRt = RefreshToken.create(
-                rt.getUser(),
-                newHashB64,
-                clock.now().plus(14, ChronoUnit.DAYS),
-                rt.getUserAgent(),
-                rt.getIp());
-        tokens.save(newRt);
+        tokens.save(RefreshToken.create(rt.getUser(), newHashB64,
+                clock.now().plus(14, ChronoUnit.DAYS), rt.getUserAgent(), rt.getIp()));
 
         var access = jwt.createAccessToken(rt.getUser());
-        var cookie = ResponseCookie.from("refresh_token", newPlain)
-                .httpOnly(true)
-                .secure(false) // ggf. mit 'cookieSecure' ersetzen
-                .sameSite("Lax")
-                .path("/api/auth")
-                .maxAge(Duration.ofDays(14))
-                .build();
-        res.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        res.addHeader(HttpHeaders.SET_COOKIE,
+                buildRefreshCookie(newPlain, req, Duration.ofDays(14).toSeconds()).toString());
 
         return ResponseEntity.ok(new TokenResponse(access));
     }
@@ -220,6 +215,23 @@ public class AuthController {
         tokens.revokeByHash(hashB64);
         res.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie("", req, 0).toString());
         return ResponseEntity.noContent().build();
+    }
+
+    // --- Password Reset: Request Token ---
+    @PostMapping("/reset")
+    public ResponseEntity<?> sendResetToken(@Valid @RequestBody ResetPasswordDto dto) {
+        passwordResetService.sendResetToken(dto.email().trim().toLowerCase());
+        // Immer OK zurückgeben, damit niemand E-Mail-Adressen prüfen kann
+        return ResponseEntity.ok().build();
+    }
+
+    // --- Password Reset: Set New Password ---
+
+    @PostMapping("/reset/confirm")
+    public ResponseEntity<?> resetPassword(@RequestBody @Valid ConfirmPasswordDto dto) {
+        boolean ok = passwordResetService.resetPassword(dto.token(), dto.newPassword());
+        return ok ? ResponseEntity.ok().build()
+                : ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid or expired token.");
     }
 
     // SHA-256 -> Base64URL (ohne Padding) als String

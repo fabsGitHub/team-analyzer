@@ -15,6 +15,7 @@ import SurveyView from './views/SurveyView.vue'
 import SurveyManageView from './views/SurveyManageView.vue'
 import AdminTeamView from './views/AdminTeamView.vue'
 import MyTokensView from './views/MyTokensView.vue'
+import ResetPasswordView from './views/ResetPasswordView.vue'
 
 const routes = [
   { path: '/', redirect: '/auth' },
@@ -38,7 +39,10 @@ const routes = [
       return { path: '/my/tokens' }
     },
   },
-
+  {
+    path: '/auth/reset',
+    component: ResetPasswordView,
+  },
   { path: '/tutorial', component: TutorialView },
   { path: '/verify', component: VerifyView },
   { path: '/imprint', component: ImprintView },
@@ -46,7 +50,7 @@ const routes = [
   { path: '/help', component: HelpView },
   { path: '/shortcuts', component: ShortcutsView },
   { path: '/about', component: AboutView },
-  { path: '/:pathMatch(.*)*', redirect: '/evaluate' },
+  { path: '/:pathMatch(.*)*', redirect: '/auth' },
 
   {
     path: '/surveys/:id',
@@ -62,19 +66,19 @@ const routes = [
     path: '/leader/surveys',
     name: 'SurveyManage',
     component: SurveyManageView,
-    meta: { requiresRole: ['leader'] },
+    meta: { requiresRole: ['LEADER'] },
   },
   {
     path: '/surveys',
     name: 'SurveyList',
     component: () => import('@/views/SurveyListView.vue'),
-    meta: { requiresRole: ['leader'] },
+    meta: { requiresRole: ['LEADER'] },
   },
   {
     path: '/admin/teams',
     name: 'TeamAdmin',
     component: AdminTeamView,
-    meta: { requiresRole: ['admin'] },
+    meta: { requiresRole: ['ADMIN'] },
   },
   {
     path: '/surveys/:id/results',
@@ -87,6 +91,7 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 const PUBLIC_PATHS = new Set<string>([
   '/auth',
+  '/auth/reset',
   '/verify',
   '/imprint',
   '/privacy',
@@ -95,12 +100,12 @@ const PUBLIC_PATHS = new Set<string>([
   '/about',
 ])
 
-function hasRole(user: any, role: 'admin' | 'leader') {
+function hasRole(user: any, role: 'ADMIN' | 'LEADER') {
   if (!user) return false
   const roles: string[] = Array.isArray(user.roles) ? user.roles : []
   const isAdmin = roles.includes('ROLE_ADMIN')
-  if (role === 'admin') return isAdmin
-  if (role === 'leader') return roles.includes('ROLE_LEADER') || isAdmin
+  if (role === 'ADMIN') return isAdmin
+  if (role === 'LEADER') return roles.includes('LEADER') || isAdmin
   return false
 }
 

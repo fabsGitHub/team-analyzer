@@ -43,11 +43,11 @@ export interface Toast {
   type?: 'success' | 'danger' | 'info' | 'warning'
 }
 
-export type Role = 'USER' | 'ROLE_ADMIN' | 'ROLE_TEAM_LEADER'
+export type Role = 'USER' | 'ADMIN' | 'LEADER'
 
 export const Roles = {
-  ADMIN: 'ROLE_ADMIN',
-  LEADER: 'ROLE_LEADER',
+  ADMIN: 'ADMIN',
+  LEADER: 'LEADER',
   USER: 'USER',
 } as const
 
