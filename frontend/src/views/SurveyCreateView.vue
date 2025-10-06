@@ -45,38 +45,35 @@
 
 <script setup lang="ts">
 import { onMounted, ref, nextTick } from 'vue'
-import { Api } from '@/api/client'
-import type { TeamLite } from '@/types'
-import { useStore } from '@/store'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore, useTeamsStore, useSurveysStore } from '@/store'
+import type { TeamLite } from '@/types'
 
 const { t } = useI18n()
-const state = useStore()
+const auth = useAuthStore()
+const teams = useTeamsStore()
+const surveys = useSurveysStore()
 
 const title = ref('')
 const teamId = ref<string>('')
 const myTeams = ref<TeamLite[]>([])
 const questions = ref<string[]>(['', '', '', '', ''])
-
 const surveyId = ref<string>('')
-
 const error = ref<string | null>(null)
-const errorStatus = ref<number | null>(null) // aktuell nur gesetzt, falls benötigt
 
 onMounted(async () => {
     try {
-        const teams = await Api.myTeams()
-        myTeams.value = teams
+        myTeams.value = await teams.loadMyTeams()
         await nextTick()
-        teamId.value = teams[0]?.id ?? ''
+        teamId.value = myTeams.value[0]?.id ?? ''
     } catch (e: any) {
         error.value = e?.response?.data?.message || e?.message || 'Failed to load teams'
     }
 })
 
 async function create() {
-    const createdBy = state.state.user?.id || 'unknown-user'
-    const dto = await Api.createSurvey({
+    const createdBy = auth.state.user?.id || 'unknown-user'
+    const dto = await surveys.createSurvey({
         teamId: teamId.value,
         title: title.value.trim(),
         createdBy,
@@ -89,11 +86,7 @@ async function create() {
         ],
     })
     surveyId.value = dto.id
-
-    // Tokens für alle Teammitglieder erzeugen
     await issueTeam()
-
-    // Formular zurücksetzen & Liste aktualisieren
     title.value = ''
     questions.value = ['', '', '', '', '']
 }
@@ -101,14 +94,14 @@ async function create() {
 async function issueTeam() {
     if (!surveyId.value) return
     try {
-        const { created } = await Api.ensureTokensForTeam(surveyId.value)
+        const { created } = await import('@/api/surveys.api').then(m => m.ensureTokensForTeam(surveyId.value))
         alert(t('surveys.create.issuedTeamTokensToast', { n: created }))
     } catch (e: any) {
         error.value = e?.response?.data?.message || e?.message || 'Token issue failed'
-        errorStatus.value = e?.response?.status ?? null
     }
 }
 </script>
+
 
 <style scoped>
 /* -------- Spacing- & Typo-Scale (4-px Grid) -------- */

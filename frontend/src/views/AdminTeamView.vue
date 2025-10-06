@@ -6,7 +6,7 @@
       </header>
 
       <!-- Neues Team anlegen -->
-      <form class="stack" style="--space: var(--s-3)" @submit.prevent="createTeam">
+      <form class="stack" style="--space: var(--s-3)" @submit.prevent="createTeamAction">
         <h2 class="h2">{{ t('admin.teams.newTitle') }}</h2>
         <div class="grid cols-3">
           <input v-model="newTeamName" class="input" :placeholder="t('admin.teams.namePlaceholder')" required
@@ -68,12 +68,11 @@
         </div>
 
         <!-- Mitglied hinzufügen (pro Team eigener Eingabestatus) -->
-        <form class="grid" @submit.prevent="addMember(team.id)">
-          <input v-model="memberInputs[team.id].userId" class="input"
-            :placeholder="t('admin.teams.addMember.userIdPlaceholder')" required
-            :aria-label="t('admin.teams.addMember.userIdPlaceholder')" />
+        <form class="grid" @submit.prevent="addMemberAction(team.id)">
+          <input v-model="mi(team.id).userId" class="input" :placeholder="t('admin.teams.addMember.userIdPlaceholder')"
+            required :aria-label="t('admin.teams.addMember.userIdPlaceholder')" />
           <label class="cluster center" style="gap: var(--s-2)">
-            <input type="checkbox" v-model="memberInputs[team.id].leader" />
+            <input type="checkbox" v-model="mi(team.id).leader" />
             {{ t('admin.teams.addMember.isLeader') }}
           </label>
           <button class="btn">{{ t('admin.teams.addMember.addBtn') }}</button>
@@ -90,9 +89,11 @@
       :confirmText="t('admin.teams.deleteTeam')" @close="deleteDialog.open = false" @confirm="confirmDeleteTeam">
       <template #title>{{ t('admin.teams.deleteTeam') }}</template>
       <div>
-        {{ deleteDialog.teamName
-          ? t('admin.teams.confirmDeleteTeamWithName', { team: deleteDialog.teamName })
-          : t('admin.teams.confirmDelete') }}
+        {{
+          deleteDialog.teamName
+            ? t('admin.teams.confirmDeleteTeamWithName', { team: deleteDialog.teamName })
+            : t('admin.teams.confirmDelete')
+        }}
       </div>
     </DialogModal>
 
@@ -102,67 +103,87 @@
       @confirm="confirmRemoveMember">
       <template #title>{{ t('admin.teams.removeMemberTitle') }}</template>
       <div>
-        {{ t('admin.teams.confirmRemoveMember', {
-          userId: removeMemberDialog.userId ?? '',
-          team: removeMemberDialog.teamName ?? ''
-        }) }}
+        {{
+          t('admin.teams.confirmRemoveMember', {
+            userId: removeMemberDialog.userId ?? '',
+            team: removeMemberDialog.teamName ?? '',
+          })
+        }}
       </div>
     </DialogModal>
-
   </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Api } from '@/api/client'
+import { useAdminTeams } from '@/composables/useAdminTeams'
 import type { TeamAdminDto } from '@/types'
 import DialogModal from '@/components/DialogModal.vue'
 
 const { t } = useI18n()
-const teams = ref<TeamAdminDto[]>([])
+const { teams, /* loading, error, */ load, createTeam, addMember, setLeader, removeMember, deleteTeam } =
+  useAdminTeams()
+
 const newTeamName = ref('')
 const newLeaderId = ref('')
+
+// pro Team Input-State
 const memberInputs = reactive<Record<string, { userId: string; leader: boolean }>>({})
+
+function ensureMemberInput(teamId: string) {
+  if (!memberInputs[teamId]) memberInputs[teamId] = { userId: '', leader: false }
+  return memberInputs[teamId]
+}
+// Safe accessor für Template
+function mi(teamId: string) {
+  return ensureMemberInput(teamId)
+}
+
+function leaderCount(team: TeamAdminDto) {
+  return team.members.filter((m) => m.leader).length
+}
 
 // Dialog-Status
 const deleteDialog = reactive<{ open: boolean; teamId: string | null; teamName: string | null }>({
-  open: false, teamId: null, teamName: null
+  open: false,
+  teamId: null,
+  teamName: null,
 })
-
 function openDeleteDialog(teamId: string) {
-  const team = teams.value.find(t => t.id === teamId) || null
+  const team = teams.value.find((t) => t.id === teamId) || null
   deleteDialog.teamId = teamId
   deleteDialog.teamName = team?.name ?? null
   deleteDialog.open = true
 }
-
-
 async function confirmDeleteTeam() {
-  if (deleteDialog.teamId) {
-    await Api.deleteTeamAdmin(deleteDialog.teamId)
-    await loadTeams()
-  }
+  if (deleteDialog.teamId) await deleteTeam(deleteDialog.teamId)
   deleteDialog.open = false
   deleteDialog.teamId = null
 }
 
-const removeMemberDialog = reactive<{ open: boolean; teamId: string | null; userId: string | null; teamName: string | null }>({
-  open: false, teamId: null, userId: null, teamName: null
+// Dialog „Mitglied entfernen“
+const removeMemberDialog = reactive<{
+  open: boolean
+  teamId: string | null
+  userId: string | null
+  teamName: string | null
+}>({
+  open: false,
+  teamId: null,
+  userId: null,
+  teamName: null,
 })
-
 function openRemoveMemberDialog(teamId: string, userId: string) {
-  const team = teams.value.find(t => t.id === teamId) || null
+  const team = teams.value.find((t) => t.id === teamId) || null
   removeMemberDialog.teamId = teamId
   removeMemberDialog.userId = userId
   removeMemberDialog.teamName = team?.name ?? null
   removeMemberDialog.open = true
 }
-
 async function confirmRemoveMember() {
   if (removeMemberDialog.teamId && removeMemberDialog.userId) {
-    await Api.removeMemberAdmin(removeMemberDialog.teamId, removeMemberDialog.userId)
-    await loadTeams()
+    await removeMember(removeMemberDialog.teamId, removeMemberDialog.userId)
   }
   removeMemberDialog.open = false
   removeMemberDialog.teamId = null
@@ -170,42 +191,29 @@ async function confirmRemoveMember() {
   removeMemberDialog.teamName = null
 }
 
-
-function ensureMemberInput(teamId: string) {
-  if (!memberInputs[teamId]) memberInputs[teamId] = { userId: '', leader: false }
-  return memberInputs[teamId]
-}
-
-function leaderCount(team: TeamAdminDto) {
-  return team.members.filter((m) => m.leader).length
-}
-
-async function loadTeams() {
-  teams.value = await Api.listTeamsAdmin()
-  teams.value.forEach((t) => ensureMemberInput(t.id))
-}
-
-async function createTeam() {
-  await Api.createTeamAdmin(newTeamName.value.trim(), newLeaderId.value.trim())
+// Actions
+async function createTeamAction() {
+  await createTeam(newTeamName.value.trim(), newLeaderId.value.trim())
   newTeamName.value = ''
   newLeaderId.value = ''
-  await loadTeams()
 }
 
-async function addMember(teamId: string) {
+async function addMemberAction(teamId: string) {
   const input = ensureMemberInput(teamId)
-  await Api.addOrUpdateMemberAdmin(teamId, input.userId.trim(), input.leader)
+  await addMember(teamId, input.userId.trim(), input.leader)
   input.userId = ''
   input.leader = false
-  await loadTeams()
 }
 
 async function toggleLeader(teamId: string, userId: string, leader: boolean) {
-  await Api.addOrUpdateMemberAdmin(teamId, userId, leader)
-  await loadTeams()
+  await setLeader(teamId, userId, leader)
 }
 
-onMounted(loadTeams)
+onMounted(async () => {
+  await load()
+  // Initialisiere Inputs für alle Teams (optional, wegen mi(teamId) nicht zwingend)
+  teams.value.forEach((t) => ensureMemberInput(t.id))
+})
 </script>
 
 <style scoped>
@@ -242,7 +250,7 @@ onMounted(loadTeams)
 
 .meta {
   color: #6b7280;
-  font-size: .9rem;
+  font-size: 0.9rem;
 }
 
 /* -------- Layout-Utilities -------- */
@@ -384,6 +392,6 @@ onMounted(loadTeams)
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 </style>

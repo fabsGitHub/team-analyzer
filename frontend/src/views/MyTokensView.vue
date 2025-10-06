@@ -1,47 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { Api } from '@/api/client'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useMyTokens } from '@/composables/useMyTokens'
 
 const { t } = useI18n()
-type MyOpenToken = Awaited<ReturnType<typeof Api.listMyOpenTokens>>[number]
-
-const tokens = ref<MyOpenToken[]>([])
-const loading = ref(true)
-const error = ref<string | null>(null)
-const busyId = ref<string | null>(null)
-
-async function load() {
-    loading.value = true
-    error.value = null
-    try {
-        tokens.value = await Api.listMyOpenTokens()
-    } catch (e: any) {
-        error.value = e?.response?.data?.message || e?.message || t('tokens.loadError')
-    } finally {
-        loading.value = false
-    }
-}
-
-async function goToSurvey(tk: MyOpenToken) {
-    busyId.value = tk.surveyId
-    try {
-        let { inviteLink } = await Api.myTokenForSurvey(tk.surveyId)
-        if (!inviteLink) {
-            const renewed = await Api.renewMyToken(tk.surveyId)
-            inviteLink = renewed.inviteLink
-        }
-        if (!inviteLink) throw new Error(t('tokens.noInviteLink'))
-        window.location.href = inviteLink
-    } catch (e: any) {
-        error.value = e?.response?.data?.message || e?.message || t('tokens.openError')
-    } finally {
-        busyId.value = null
-    }
-}
+const { tokens, loading, error, busyId, load, goToSurvey } = useMyTokens()
 
 onMounted(load)
 </script>
+
 
 <template>
     <section class="admin-page">

@@ -34,15 +34,15 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from "@/store"
 import { ref, onMounted } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRouter, useRoute } from "vue-router"
-import { useStore } from "../store"
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
-const { login, register, resetPassword } = useStore()
+const { login, register, resetPassword } = useAuthStore()
 
 const idEmail = "email-input"
 const idPwd = "password-input"

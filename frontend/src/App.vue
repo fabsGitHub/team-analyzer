@@ -13,13 +13,13 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
-import { useStore } from '@/store'
+import { useAuthStore } from '@/store'
 
 import HeaderNav from '@/components/HeaderNav.vue'
 import Toast from '@/components/Toast.vue'
 import FooterModal from '@/components/FooterModal.vue'
 
-const { init } = useStore()
+const { init } = useAuthStore()
 onMounted(() => { init() })
 </script>
 

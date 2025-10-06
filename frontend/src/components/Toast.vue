@@ -13,8 +13,9 @@
     </div>
 </template>
 <script setup lang="ts">
-import { useStore } from '../store'
-const { state, dismiss } = useStore()
+import { useAuthStore } from '@/store';
+
+const { state, dismiss } = useAuthStore()
 </script>
 <style scoped>
 .toasts {

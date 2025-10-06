@@ -14,6 +14,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import * as Auth from '@/api/auth.api'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -24,18 +25,15 @@ onMounted(async () => {
     const token = (route.query.token as string | undefined) ?? ''
     if (!token) { status.value = 'missing'; return }
     try {
-        const res = await fetch('/api/auth/verify?token=' + encodeURIComponent(token), {
-            method: 'GET', credentials: 'include',
-        })
-        if (res.status === 204 || res.ok) {
-            status.value = 'ok'
-            router.replace('/auth?verified=1')
-        } else {
-            status.value = 'error'
-        }
-    } catch { status.value = 'error' }
+        await Auth.verifyEmail(token)
+        status.value = 'ok'
+        router.replace('/auth?verified=1')
+    } catch {
+        status.value = 'error'
+    }
 })
 </script>
+
 
 <style scoped>
 :root,

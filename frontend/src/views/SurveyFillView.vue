@@ -52,12 +52,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { Api } from "@/api/client";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import * as Surveys from "@/api/surveys.api";
 import type { SurveyDto } from "@/types";
 import LikertScale from "@/components/LikertScale.vue";
 import { useI18n } from 'vue-i18n'
-import { onBeforeRouteLeave } from 'vue-router'
 import { abortGroup } from '@/api/client'
 
 onBeforeRouteLeave(() => abortGroup('survey'))
@@ -71,74 +70,53 @@ const survey = ref<SurveyDto | null>(null);
 const loading = ref<boolean>(false);
 const error = ref<string | null>(null);
 const submitting = ref<boolean>(false);
-
-// Antworten synchron zur Anzahl der Fragen
 const answers = ref<number[]>([]);
 const token = ref<string>("");
 
 async function load() {
-  loading.value = true;
-  error.value = null;
-  survey.value = null;
-  answers.value = [];
-
+  loading.value = true; error.value = null; survey.value = null; answers.value = [];
   try {
     token.value = (route.query.token as string) ?? "";
     const id = String(route.params.id || "");
     if (!id) throw new Error("Missing survey id");
-    const s = await Api.getSurvey(id);
+    const s = await Surveys.getSurvey(id);
     survey.value = s;
-
     const qLen = Array.isArray(s.questions) ? s.questions.length : 0;
-    // Initial auf 0 setzen (ungültig), damit valid erst true wird, wenn alles 1..5 ist
     answers.value = Array.from({ length: qLen }, () => 0);
   } catch (e: any) {
-    console.error("load survey failed", e);
     error.value = e?.message || "Failed to load survey";
   } finally {
     loading.value = false;
   }
 }
+onMounted(load)
+watch(() => route.fullPath, load)
 
-onMounted(load);
-watch(() => route.fullPath, load);
-
-const answersFilled = computed(
-  () => answers.value.filter(v => v >= 1 && v <= 5).length
-);
-
-// Backend erwartet q1..q5 – wir halten das bei der Validierung ein:
-const requiresCount = 5;
+const answersFilled = computed(() => answers.value.filter(v => v >= 1 && v <= 5).length)
+const requiresCount = 5
 const valid = computed(() => {
-  const tokOk = token.value.trim().length > 0;
-  // Wenn weniger als 5 Fragen vorhanden sind, validiere, was da ist,
-  // aber blocke submit, wenn weniger als 5 Antworten gebraucht werden.
-  const need = Math.min(answers.value.length, requiresCount);
-  const ok = answers.value.slice(0, need).every(v => v >= 1 && v <= 5);
-  return tokOk && ok && need === requiresCount;
-});
+  const tokOk = token.value.trim().length > 0
+  const need = Math.min(answers.value.length, requiresCount)
+  const ok = answers.value.slice(0, need).every(v => v >= 1 && v <= 5)
+  return tokOk && ok && need === requiresCount
+})
 
 async function submit() {
-  if (!survey.value) return;
-  if (!valid.value) return;
-
-  submitting.value = true;
+  if (!survey.value || !valid.value) return
+  submitting.value = true
   try {
-    const id = String(route.params.id || "");
-    const [q1, q2, q3, q4, q5] = answers.value;
-    await Api.submitSurveyResponses(id, {
-      token: token.value.trim(),
-      q1, q2, q3, q4, q5
-    });
-    router.replace({ name: "MyToken", query: { submitted: "1" } });
+    const id = String(route.params.id || "")
+    const [q1, q2, q3, q4, q5] = answers.value
+    await Surveys.submitSurveyResponses(id, { token: token.value.trim(), q1, q2, q3, q4, q5 })
+    router.replace({ name: "MyToken", query: { submitted: "1" } })
   } catch (e: any) {
-    console.error("submit failed", e);
-    error.value = e?.message ?? "Submit failed";
+    error.value = e?.message ?? "Submit failed"
   } finally {
-    submitting.value = false;
+    submitting.value = false
   }
 }
 </script>
+
 
 <style scoped>
 /* ---- Scale & utilities ---- */
