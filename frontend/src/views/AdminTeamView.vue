@@ -201,7 +201,7 @@ async function addMember(teamId: string) {
 }
 
 async function toggleLeader(teamId: string, userId: string, leader: boolean) {
-  await Api.setLeaderAdmin(teamId, userId, leader)
+  await Api.addOrUpdateMemberAdmin(teamId, userId, leader)
   await loadTeams()
 }
 

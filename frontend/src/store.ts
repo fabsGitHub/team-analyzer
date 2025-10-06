@@ -1,7 +1,6 @@
 // src/store.ts
 import { reactive } from 'vue'
-import { Api, useAuthToken } from '@/api/client'
-import { abortGroup } from '@/api/client' // << NEU: zum gezielten Abbrechen
+import { Api, abortGroup, useAuthToken } from '@/api/client'
 import { i18n } from '@/i18n'
 import type {
   SurveyDto,
@@ -9,15 +8,44 @@ import type {
   TeamLite,
   TeamAdminDto,
   CreateSurveyRequest,
+  SubmitSurveyRequest,
   Toast as ToastType,
 } from '@/types'
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Konstanten
+// ───────────────────────────────────────────────────────────────────────────────
+const TOAST_AUTOHIDE_MS = 2500 as const
+
+// Bereiche/Keys für "latest wins"
+const RUN = {
+  SURVEY: 'survey',
+  RESULTS: 'results',
+  ME_TEAMS: 'me/teams',
+  ADMIN_TEAMS: 'admin/teams',
+  ME_SURVEYS: 'me/surveys',
+  MY_TOKENS: 'my/tokens',
+} as const
+
+// Cancel-Gruppen (gleich benannt wie RUN, aber getrennt definiert falls abweichend nötig)
+const GROUP = {
+  SURVEY: 'survey',
+  SURVEY_SUBMIT: 'survey-submit',
+  ME_TEAMS: 'me/teams',
+  ME_SURVEYS: 'me/surveys',
+  MY_TOKENS: 'my/tokens',
+  ADMIN_TEAMS: 'admin/teams',
+} as const
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ───────────────────────────────────────────────────────────────────────────────
 function uuid() {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
 }
 const $t = (k: string) => (i18n.global as any).t(k) as string
 
-// ---- Helper: "latest wins" pro Bereich ----
+// "latest wins" pro Bereich
 const latestRun: Record<string, string> = {}
 function newRun(key: string) {
   const id = uuid()
@@ -36,6 +64,62 @@ function isCanceledError(e: any) {
   )
 }
 
+// Gemeinsame Loader-Helfer: weniger Boilerplate in den Actions
+function beginLoad(
+  key: string,
+  opts?: {
+    group?: string
+    setLoading?: (v: boolean) => void
+    setError?: (s: string) => void
+  },
+) {
+  const id = newRun(key)
+  if (opts?.group) {
+    try {
+      abortGroup(opts.group)
+    } catch {}
+  }
+  opts?.setLoading?.(true)
+  opts?.setError?.('')
+  return id
+}
+function endLoad(
+  key: string,
+  id: string,
+  opts?: { setLoading?: (v: boolean) => void },
+) {
+  if (!isStale(key, id)) opts?.setLoading?.(false)
+}
+function guardStale<T>(key: string, id: string, value?: T) {
+  // Wenn veraltet, nichts mehr ändern / optionalen Rückgabewert liefern
+  if (isStale(key, id)) return { stale: true as const, value }
+  return { stale: false as const }
+}
+function handleLoadError(
+  key: string,
+  id: string,
+  e: any,
+  opts?: { setError?: (s: string) => void },
+) {
+  if (isCanceledError(e)) return { handled: true }
+  if (isStale(key, id)) return { handled: true }
+  opts?.setError?.(e?.message || String(e))
+  return { handled: false }
+}
+
+// i18n-Setter (Composition + Legacy kompatibel)
+function setI18nLocale(lang: string) {
+  const loc = (i18n.global as any).locale
+  if (loc && typeof loc === 'object' && 'value' in loc) {
+    loc.value = lang
+  } else {
+    ;(i18n.global as any).locale = lang
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// State & API-Schnittstelle
+// ───────────────────────────────────────────────────────────────────────────────
 interface State {
   token: string
   user: {
@@ -47,21 +131,26 @@ interface State {
   toasts: ToastType[]
   loading: boolean
   error: string
+
   currentSurvey: SurveyDto | null
   surveyLoading: boolean
   surveyError: string
   lastSubmittedSurveyId: string
+
   results: SurveyResultsDto | null
   resultsLoading: boolean
   resultsError: string
+
   myTeams: TeamLite[]
   leaderLoading: boolean
   leaderError: string
   lastCreatedSurveyId: string
   issuedTokens: string[]
+
   teamsAdmin: TeamAdminDto[]
   adminLoading: boolean
   adminError: string
+
   language?: string
 }
 
@@ -77,17 +166,7 @@ interface StoreApi {
   setToken(t: string): void
   // survey public
   loadSurvey(surveyId: string): Promise<void>
-  submitSurvey(
-    surveyId: string,
-    body: {
-      token: string
-      q1: number
-      q2: number
-      q3: number
-      q4: number
-      q5: number
-    },
-  ): Promise<void>
+  submitSurvey(surveyId: string, body: SubmitSurveyRequest): Promise<void>
   loadSurveyResults(surveyId: string): Promise<SurveyResultsDto | null>
   // leader
   loadMyTeams(): Promise<TeamLite[]>
@@ -110,30 +189,45 @@ interface StoreApi {
   setLanguage(lang: string): void
 }
 
+// Reaktiver State
 const state: State = reactive({
   token: '',
   user: null,
   toasts: [],
   loading: false,
   error: '',
+
   currentSurvey: null,
   surveyLoading: false,
   surveyError: '',
   lastSubmittedSurveyId: '',
+
   results: null,
   resultsLoading: false,
   resultsError: '',
+
   myTeams: [],
   leaderLoading: false,
   leaderError: '',
   lastCreatedSurveyId: '',
   issuedTokens: [],
+
   teamsAdmin: [],
   adminLoading: false,
   adminError: '',
+
   language: 'de',
 })
 
+// Token zwischen Store ⟷ Api-Client verdrahten
+useAuthToken(
+  () => state.token,
+  (t) => {
+    state.token = t
+  },
+)
+
+// UI-Helpers
 const isLoggedIn = () => !!state.user?.email
 function dismiss(id: string) {
   state.toasts = state.toasts.filter((t) => t.id !== id)
@@ -141,23 +235,12 @@ function dismiss(id: string) {
 function toast(text: string, type?: ToastType['type']) {
   const id = uuid()
   state.toasts.push({ id, text, type })
-  setTimeout(() => dismiss(id), 2500)
+  setTimeout(() => dismiss(id), TOAST_AUTOHIDE_MS)
 }
 
-function setI18nLocale(lang: string) {
-  const loc = (i18n.global as any).locale
-  if (loc && typeof loc === 'object' && 'value' in loc) {
-    loc.value = lang // Composition API
-  } else {
-    ;(i18n.global as any).locale = lang // Fallback
-  }
-}
-
-useAuthToken(
-  () => state.token,
-  (t) => (state.token = t),
-)
-
+// ───────────────────────────────────────────────────────────────────────────────
+// Store-Factory
+// ───────────────────────────────────────────────────────────────────────────────
 export const useStore = (): StoreApi => {
   // --- Auth ---
   function setUser(u: { email: string; roles: string[] } | null) {
@@ -166,6 +249,7 @@ export const useStore = (): StoreApi => {
 
   // WICHTIG: init() soll auf Public-Seiten keinen Refresh triggern
   async function init() {
+    // Sprache aus Storage holen
     try {
       const saved =
         typeof window !== 'undefined'
@@ -177,12 +261,13 @@ export const useStore = (): StoreApi => {
         setI18nLocale(saved)
       }
     } catch {}
+
     state.loading = true
     state.error = ''
     try {
       // "soft" /me: 401 erlaubt → kein Refresh
       await Api.meAnonymousOk()
-      // wenn der Benutzer bereits eingeloggt ist, holt der Routen-Guard später das echte /me
+      // Falls bereits eingeloggt, holt der Router-Guard später das echte /me
     } finally {
       state.loading = false
     }
@@ -193,108 +278,128 @@ export const useStore = (): StoreApi => {
     state.user = await Api.me()
     toast($t('toast.signedin'))
   }
+
   async function register(email: string, password: string) {
     await Api.register(email, password)
     toast($t('auth.check_mail'))
   }
+
   async function logout() {
     // laufende Gruppen abbrechen, um Race-Conditions nach Logout zu vermeiden
     try {
-      abortGroup('survey')
-      abortGroup('me/teams')
-      abortGroup('me/surveys')
-      abortGroup('my/tokens')
-      abortGroup('admin/teams')
+      abortGroup(GROUP.SURVEY)
+      abortGroup(GROUP.ME_TEAMS)
+      abortGroup(GROUP.ME_SURVEYS)
+      abortGroup(GROUP.MY_TOKENS)
+      abortGroup(GROUP.ADMIN_TEAMS)
     } catch {}
     await Api.logout()
     state.user = null
     state.token = ''
     toast($t('toast.signedout'))
   }
+
   async function resetPassword(email: string) {
     await Api.resetPassword(email)
     toast($t('auth.reset_sent'))
   }
+
   function setToken(t: string) {
     state.token = t
   }
 
   // --- Survey (public) ---
   async function loadSurvey(surveyId: string) {
-    // "latest wins" + evtl. vorherige Requests hart abbrechen
-    const run = newRun('survey')
-    abortGroup('survey')
-
+    const runId = beginLoad(RUN.SURVEY, {
+      group: GROUP.SURVEY,
+      setLoading: (v) => (state.surveyLoading = v),
+      setError: (s) => (state.surveyError = s),
+    })
     state.currentSurvey = null
-    state.surveyLoading = true
-    state.surveyError = ''
+
     try {
       const dto = await Api.getSurvey(surveyId)
-      if (isStale('survey', run)) return
+      if (guardStale(RUN.SURVEY, runId).stale) return
       state.currentSurvey = dto
     } catch (e: any) {
-      if (isCanceledError(e)) return
-      if (isStale('survey', run)) return
-      state.surveyError = e?.message || String(e)
-      throw e
+      if (
+        !handleLoadError(RUN.SURVEY, runId, e, {
+          setError: (s) => (state.surveyError = s),
+        }).handled
+      ) {
+        throw e
+      }
     } finally {
-      if (!isStale('survey', run)) state.surveyLoading = false
+      endLoad(RUN.SURVEY, runId, {
+        setLoading: (v) => (state.surveyLoading = v),
+      })
     }
   }
 
-  async function submitSurvey(
-    surveyId: string,
-    body: {
-      token: string
-      q1: number
-      q2: number
-      q3: number
-      q4: number
-      q5: number
-    },
-  ) {
+  async function submitSurvey(surveyId: string, body: SubmitSurveyRequest) {
     await Api.submitSurveyResponses(surveyId, body)
     state.lastSubmittedSurveyId = surveyId
     toast($t('survey.thanks') || 'Danke für die Teilnahme!')
   }
 
   async function loadSurveyResults(surveyId: string) {
-    const run = newRun('results')
-    state.resultsLoading = true
-    state.resultsError = ''
+    const runId = beginLoad(RUN.RESULTS, {
+      setLoading: (v) => (state.resultsLoading = v),
+      setError: (s) => (state.resultsError = s),
+    })
+
     try {
       const r = await Api.getSurveyResults(surveyId)
-      if (isStale('results', run)) return state.results
+      if (guardStale(RUN.RESULTS, runId, state.results).stale)
+        return state.results
       state.results = r
       return r
     } catch (e: any) {
-      if (isCanceledError(e)) return state.results
-      if (isStale('results', run)) return state.results
-      state.resultsError = e?.message || String(e)
-      throw e
+      if (
+        !handleLoadError(RUN.RESULTS, runId, e, {
+          setError: (s) => (state.resultsError = s),
+        }).handled
+      ) {
+        throw e
+      }
+      return state.results
     } finally {
-      if (!isStale('results', run)) state.resultsLoading = false
+      endLoad(RUN.RESULTS, runId, {
+        setLoading: (v) => (state.resultsLoading = v),
+      })
     }
   }
 
   // --- Leader ---
   async function loadMyTeams() {
-    const run = newRun('me/teams')
-    state.leaderLoading = true
-    state.leaderError = ''
+    const runId = beginLoad(RUN.ME_TEAMS, {
+      setLoading: (v) => (state.leaderLoading = v),
+      setError: (s) => (state.leaderError = s),
+    })
+
     try {
-      if (!isLoggedIn()) return ((state.myTeams = []), [])
+      if (!isLoggedIn()) {
+        state.myTeams = []
+        return []
+      }
       const teams = await Api.myTeams()
-      if (isStale('me/teams', run)) return state.myTeams
+      if (guardStale(RUN.ME_TEAMS, runId, state.myTeams).stale)
+        return state.myTeams
       state.myTeams = teams
       return teams
     } catch (e: any) {
-      if (isCanceledError(e)) return state.myTeams
-      if (isStale('me/teams', run)) return state.myTeams
-      state.leaderError = e?.message || String(e)
-      throw e
+      if (
+        !handleLoadError(RUN.ME_TEAMS, runId, e, {
+          setError: (s) => (state.leaderError = s),
+        }).handled
+      ) {
+        throw e
+      }
+      return state.myTeams
     } finally {
-      if (!isStale('me/teams', run)) state.leaderLoading = false
+      endLoad(RUN.ME_TEAMS, runId, {
+        setLoading: (v) => (state.leaderLoading = v),
+      })
     }
   }
 
@@ -334,21 +439,30 @@ export const useStore = (): StoreApi => {
 
   // --- Admin ---
   async function loadTeamsAdmin() {
-    const run = newRun('admin/teams')
-    state.adminLoading = true
-    state.adminError = ''
+    const runId = beginLoad(RUN.ADMIN_TEAMS, {
+      setLoading: (v) => (state.adminLoading = v),
+      setError: (s) => (state.adminError = s),
+    })
+
     try {
       const teams = await Api.listTeamsAdmin()
-      if (isStale('admin/teams', run)) return state.teamsAdmin
+      if (guardStale(RUN.ADMIN_TEAMS, runId, state.teamsAdmin).stale)
+        return state.teamsAdmin
       state.teamsAdmin = teams
       return teams
     } catch (e: any) {
-      if (isCanceledError(e)) return state.teamsAdmin
-      if (isStale('admin/teams', run)) return state.teamsAdmin
-      state.adminError = e?.message || String(e)
-      throw e
+      if (
+        !handleLoadError(RUN.ADMIN_TEAMS, runId, e, {
+          setError: (s) => (state.adminError = s),
+        }).handled
+      ) {
+        throw e
+      }
+      return state.teamsAdmin
     } finally {
-      if (!isStale('admin/teams', run)) state.adminLoading = false
+      endLoad(RUN.ADMIN_TEAMS, runId, {
+        setLoading: (v) => (state.adminLoading = v),
+      })
     }
   }
 
@@ -357,6 +471,7 @@ export const useStore = (): StoreApi => {
     toast($t('team.created') || 'Team erstellt.')
     await loadTeamsAdmin()
   }
+
   async function addMemberAdmin(
     teamId: string,
     userId: string,
@@ -366,26 +481,29 @@ export const useStore = (): StoreApi => {
     toast($t('team.member_added') || 'Mitglied hinzugefügt.')
     await loadTeamsAdmin()
   }
+
   async function setLeaderAdmin(
     teamId: string,
     userId: string,
     leader: boolean,
   ) {
-    await Api.setLeaderAdmin(teamId, userId, leader)
+    await Api.addOrUpdateMemberAdmin(teamId, userId, leader)
     toast($t('team.leader_updated') || 'Leader aktualisiert.')
     await loadTeamsAdmin()
   }
+
   async function removeMemberAdmin(teamId: string, userId: string) {
     await Api.removeMemberAdmin(teamId, userId)
     toast($t('team.member_removed') || 'Mitglied entfernt.')
     await loadTeamsAdmin()
   }
 
+  // --- UI ---
   function setLanguage(lang: string) {
     state.language = lang
     setI18nLocale(lang)
     try {
-      sessionStorage.setItem('app.lang', lang) // 👈 nur für diese Sitzung
+      sessionStorage.setItem('app.lang', lang) // nur für diese Sitzung
     } catch {}
   }
 
