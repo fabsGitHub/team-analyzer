@@ -1,6 +1,7 @@
 <!-- frontend/src/components/DialogModal.vue -->
 <template>
-  <div v-if="open" class="modal" role="dialog" aria-modal="true" :aria-labelledby="titleId" @keydown.esc.prevent="close">
+  <div v-if="open" class="modal" role="dialog" aria-modal="true" :aria-labelledby="titleId"
+    @keydown.esc.prevent="close">
     <div class="backdrop" @click="close"></div>
     <div class="sheet card" ref="panel" tabindex="-1">
       <button class="iconbtn close" @click="close" :aria-label="t('dialog.closeAria')">✕</button>
@@ -23,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch, computed } from 'vue'
+import { onMounted, ref, watch, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
@@ -40,7 +41,12 @@ const panel = ref<HTMLDivElement | null>(null)
 const titleId = `dialog-${Math.random().toString(36).slice(2)}`
 const close = () => emit('close')
 
-watch(() => props.open, (v) => { if (v) setTimeout(() => panel.value?.focus(), 0) })
+watch(() => props.open, async (v) => {
+  if (v) {
+    await nextTick()
+    panel.value?.focus({ preventScroll: true })
+  }
+})
 onMounted(() => { if (props.open) panel.value?.focus() })
 
 // i18n-Defaults für Buttons
@@ -50,39 +56,39 @@ const confirmLabel = computed(() => props.confirmText ?? t('form.confirm'))
 
 <style scoped>
 .modal {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    z-index: 40;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 40;
 }
 
 .backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, .35)
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .35)
 }
 
 .sheet {
-    position: relative;
-    max-width: 34rem;
-    width: calc(100% - 2rem);
-    max-height: 90vh;
-    overflow: auto;
+  position: relative;
+  max-width: 34rem;
+  width: calc(100% - 2rem);
+  max-height: 90vh;
+  overflow: auto;
 }
 
 .close {
-    position: absolute;
-    top: .5rem;
-    right: .5rem;
+  position: absolute;
+  top: .5rem;
+  right: .5rem;
 }
 
 @media (max-width:720px) {
-    .sheet {
-        width: 100vw;
-        height: 100vh;
-        max-width: none;
-        border-radius: 0
-    }
+  .sheet {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    border-radius: 0
+  }
 }
 </style>

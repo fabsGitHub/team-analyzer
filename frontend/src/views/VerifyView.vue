@@ -27,7 +27,8 @@ onMounted(async () => {
     try {
         await Auth.verifyEmail(token)
         status.value = 'ok'
-        router.replace('/auth?verified=1')
+        setTimeout(() => router.replace({ path: '/auth', query: { verified: '1' } }), 800)
+
     } catch {
         status.value = 'error'
     }

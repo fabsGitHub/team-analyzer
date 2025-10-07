@@ -143,7 +143,7 @@ export function useAuthStore() {
     resetPassword,
     refreshUser,
     setLanguage,
-    setUser
+    setUser,
   }
 }
 export type AuthStore = ReturnType<typeof useAuthStore>

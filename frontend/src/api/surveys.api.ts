@@ -37,13 +37,20 @@ export async function getSurveyResults(id: string): Promise<SurveyResultsDto> {
   return data
 }
 
-export async function createSurvey(payload: CreateSurveyRequest): Promise<SurveyDto> {
+export async function createSurvey(
+  payload: CreateSurveyRequest,
+): Promise<SurveyDto> {
   const { data } = await http.post<SurveyDto>('/surveys', payload)
   return data
 }
 
-export async function issueSurveyTokens(id: string, count: number): Promise<string[]> {
-  const { data } = await http.post<string[]>(`/surveys/${id}/tokens/batch`, { count })
+export async function issueSurveyTokens(
+  id: string,
+  count: number,
+): Promise<string[]> {
+  const { data } = await http.post<string[]>(`/surveys/${id}/tokens/batch`, {
+    count,
+  })
   return data
 }
 
@@ -91,7 +98,9 @@ export async function listMyOpenTokens(): Promise<MyOpenToken[]> {
   return data
 }
 
-export async function listMySurveys(): Promise<(SurveyDto & { teamName?: string })[]> {
+export async function listMySurveys(): Promise<
+  (SurveyDto & { teamName?: string })[]
+> {
   const { data } = await http.get('/me/surveys', {
     cancelGroup: 'me/surveys',
     retry: 2,

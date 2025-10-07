@@ -190,10 +190,40 @@ export async function prewarmSession(): Promise<boolean> {
   }
 }
 
+function redirectToLogin(override?: string) {
+  if (typeof window === 'undefined') return
+  const here =
+    override ??
+    window.location.pathname + window.location.search + window.location.hash
+  // Loop-Schutz: Wenn wir schon auf /auth sind, nichts tun
+  const alreadyOnAuth = window.location.pathname.startsWith('/auth')
+  if (alreadyOnAuth) return
+
+  const target =
+    '/auth' +
+    (here && !here.startsWith('/auth')
+      ? `?redirect=${encodeURIComponent(here)}`
+      : '')
+
+  try {
+    if (window.location.pathname + window.location.search !== target) {
+      window.location.replace(target)
+    }
+  } catch {
+    // no-op (SSR o. Ä.)
+  }
+}
+
 // /me nur einmal parallel laden
 let mePromise: Promise<any> | null = null
 export async function fetchMeOnce(allowAnonymous = false) {
   if (!mePromise) {
+    if (!allowAnonymous) {
+      await ensureRefresh().catch(() => {
+        redirectToLogin()
+        // throw err
+      })
+    }
     mePromise = http
       .get('/me', {
         allowAnonymous,

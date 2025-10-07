@@ -2,7 +2,11 @@
 import { http, ClientUtils } from './client'
 
 export async function register(email: string, password: string): Promise<void> {
-  await http.post('/auth/register', { email, password }, { skipAuthHeader: true })
+  await http.post(
+    '/auth/register',
+    { email, password },
+    { skipAuthHeader: true },
+  )
 }
 
 export async function login(
@@ -22,7 +26,10 @@ export async function logout(): Promise<void> {
 }
 
 export async function me(): Promise<{
-  email: string; roles: string[]; id: string; isLeader: boolean
+  email: string
+  roles: string[]
+  id: string
+  isLeader: boolean
 }> {
   await ClientUtils.prewarmSession()
   const data = await ClientUtils.fetchMeOnce()

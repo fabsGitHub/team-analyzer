@@ -29,7 +29,7 @@
             <span class="meta">{{ t('admin.teams.membersCount', { n: team.members.length }) }}</span>
             <span class="meta">{{ t('admin.teams.leadersCount', { n: leaderCount(team) }) }}</span>
           </div>
-          <button class="btn danger ghost" @click="openDeleteDialog(team.id)">
+          <button class="btn danger ghost" @click="openDeleteDialog(team)">
             {{ t('admin.teams.deleteTeam') }}
           </button>
         </header>
@@ -54,7 +54,7 @@
                     <button class="btn" @click="toggleLeader(team.id, m.userId, !m.leader)">
                       {{ m.leader ? t('admin.teams.removeLeader') : t('admin.teams.makeLeader') }}
                     </button>
-                    <button class="btn danger" @click="openRemoveMemberDialog(team.id, m.userId)">
+                    <button class="btn danger" @click="openRemoveMemberDialog(team, m.userId)">
                       {{ t('admin.teams.removeMember') }}
                     </button>
                   </div>
@@ -122,7 +122,7 @@ import type { TeamAdminDto } from '@/types'
 import DialogModal from '@/components/DialogModal.vue'
 
 const { t } = useI18n()
-const { teams, /* loading, error, */ load, createTeam, addMember, setLeader, removeMember, deleteTeam } =
+const { teams, load, createTeam, addMember, setLeader, removeMember, deleteTeam } =
   useAdminTeams()
 
 const newTeamName = ref('')
@@ -150,9 +150,8 @@ const deleteDialog = reactive<{ open: boolean; teamId: string | null; teamName: 
   teamId: null,
   teamName: null,
 })
-function openDeleteDialog(teamId: string) {
-  const team = teams.value.find((t) => t.id === teamId) || null
-  deleteDialog.teamId = teamId
+function openDeleteDialog(team: TeamAdminDto) {
+  deleteDialog.teamId = team.id
   deleteDialog.teamName = team?.name ?? null
   deleteDialog.open = true
 }
@@ -174,9 +173,8 @@ const removeMemberDialog = reactive<{
   userId: null,
   teamName: null,
 })
-function openRemoveMemberDialog(teamId: string, userId: string) {
-  const team = teams.value.find((t) => t.id === teamId) || null
-  removeMemberDialog.teamId = teamId
+function openRemoveMemberDialog(team: TeamAdminDto, userId: string) {
+  removeMemberDialog.teamId = team.id
   removeMemberDialog.userId = userId
   removeMemberDialog.teamName = team?.name ?? null
   removeMemberDialog.open = true

@@ -113,7 +113,7 @@ const PUBLIC_PATHS = new Set<string>([
 function hasRole(user: any, role: 'ADMIN' | 'LEADER') {
   if (!user) return false
   const roles: string[] = Array.isArray(user.roles) ? user.roles : []
-  const isAdmin = roles.includes('ROLE_ADMIN')
+  const isAdmin = roles.includes('ADMIN')
   if (role === 'ADMIN') return isAdmin
   if (role === 'LEADER') return roles.includes('LEADER') || isAdmin
   return false
